@@ -35,6 +35,9 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 .page-slider { flex: 1; max-width: 300px; accent-color: #0078d4; cursor: pointer; }
 .zoom-ind { font-size: 0.75rem; color: #888; min-width: 36px; text-align: center; }
 
+/* Text input box */
+.text-input-box { position: fixed; border: 2px dashed #0078d4; background: transparent; color: inherit; outline: none; font-size: 20px; font-family: "Segoe UI", sans-serif; padding: 2px 4px; min-width: 80px; min-height: 30px; z-index: 300; resize: none; overflow: hidden; line-height: 1.3; }
+
 /* Zoom indicator popup */
 .zoom-pop { position: fixed; bottom: 60px; right: 16px; background: rgba(0,0,0,0.8); color: #fff; padding: 5px 12px; border-radius: 20px; font-size: 0.8rem; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 200; }
 .zoom-pop.show { opacity: 1; }
@@ -45,6 +48,7 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 <div class="header">
   <span class="title">📚 RAZ Report 2-3</span>
   <button class="tool-btn" data-tool="draw" onclick="setTool('draw')">🖊️ 펜</button>
+  <button class="tool-btn" data-tool="text" onclick="setTool('text')">🔤 텍스트</button>
   <button class="tool-btn" data-tool="erase" onclick="setTool('erase')">📝 지우개</button>
   <button class="tool-btn" data-tool="pan" onclick="setTool('pan')">🤚 이동</button>
   <div class="sep"></div>
@@ -141,6 +145,7 @@ function setTool(t) {
   });
   if (t === 'pan') canvas.style.cursor = 'grab';
   else if (t === 'erase') canvas.style.cursor = 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\'><rect x=\'2\' y=\'8\' width=\'20\' height=\'14\' rx=\'2\' fill=\'%23fff\' stroke=\'%23999\' stroke-width=\'2\'/><line x1=\'2\' y1=\'15\' x2=\'22\' y2=\'15\' stroke=\'%23999\' stroke-width=\'1\'/></svg>") 12 20, cell';
+  else if (t === 'text') canvas.style.cursor = 'text';
   else canvas.style.cursor = 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\'><line x1=\'20\' y1=\'2\' x2=\'4\' y2=\'22\' stroke=\'%23333\' stroke-width=\'3\'/><line x1=\'20\' y1=\'2\' x2=\'4\' y2=\'22\' stroke=\'%23fff\' stroke-width=\'1.5\'/><polygon points=\'2,22 8,20 4,16\' fill=\'%23fff\'/></svg>") 2 22, crosshair';
 }
 document.getElementById('colorPick').oninput = function(e){ penColor = e.target.value; };
@@ -214,6 +219,56 @@ function getPos(e) {
 
 var panSX = 0, panSY = 0, panTX0 = 0, panTY0 = 0;
 
+// Text tool
+var activeTextBox = null;
+function commitTextBox() {
+  if (!activeTextBox) return;
+  var text = activeTextBox.value.trim();
+  if (text) {
+    var rect = canvas.getBoundingClientRect();
+    var sx = canvas.width / rect.width;
+    var sy = canvas.height / rect.height;
+    var boxRect = activeTextBox.getBoundingClientRect();
+    var x = (boxRect.left - rect.left) * sx;
+    var y = (boxRect.top - rect.top) * sy;
+    var fontSize = parseInt(activeTextBox.style.fontSize) * sx;
+    ctx.save();
+    ctx.font = 'bold ' + fontSize + 'px "Segoe UI", sans-serif';
+    ctx.fillStyle = penColor;
+    ctx.globalCompositeOperation = 'source-over';
+    var lines = text.split('\n');
+    lines.forEach(function(line, i) {
+      ctx.fillText(line, x, y + fontSize * 1.3 * (i + 1));
+    });
+    ctx.restore();
+  }
+  document.body.removeChild(activeTextBox);
+  activeTextBox = null;
+}
+function createTextBox(clientX, clientY) {
+  commitTextBox();
+  var box = document.createElement('textarea');
+  box.className = 'text-input-box';
+  box.style.left = clientX + 'px';
+  box.style.top = clientY + 'px';
+  box.style.color = penColor;
+  box.style.fontSize = Math.max(14, penSize * 3) + 'px';
+  box.rows = 1;
+  // auto-grow
+  box.addEventListener('input', function() {
+    box.style.height = 'auto';
+    box.style.height = box.scrollHeight + 'px';
+  });
+  box.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') { document.body.removeChild(box); activeTextBox = null; }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitTextBox(); }
+    e.stopPropagation(); // prevent page navigation
+  });
+  document.body.appendChild(box);
+  box.focus();
+  activeTextBox = box;
+}
+
 canvas.addEventListener('mousedown', startInteract);
 canvas.addEventListener('touchstart', startInteract, {passive:true});
 window.addEventListener('mousemove', doInteract);
@@ -225,6 +280,10 @@ function startInteract(e) {
   if (e.touches && e.touches.length > 1) return;
   var cx = e.touches ? e.touches[0].clientX : e.clientX;
   var cy = e.touches ? e.touches[0].clientY : e.clientY;
+  if (tool === 'text') {
+    createTextBox(cx, cy);
+    return;
+  }
   if (tool === 'pan') {
     panSX = cx; panSY = cy; panTX0 = tx; panTY0 = ty;
     canvas.style.cursor = 'grabbing';
