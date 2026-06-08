@@ -116,19 +116,22 @@ window.addEventListener('resize', resizeCanvas);
 
 function goPage(n) {
   if (n < 0 || n >= TOTAL) return;
-  // save current
   saves[cur] = ctx.getImageData(0, 0, canvas.width, canvas.height);
   cur = n;
+  location.hash = cur;
   img.src = 'pages/' + String(cur).padStart(3,'0') + '.jpg';
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   pageInfo.textContent = (cur+1) + ' / ' + TOTAL;
   pageSlider.value = cur;
   prevBtn.disabled = cur === 0;
   nextBtn.disabled = cur === TOTAL - 1;
-  // restore saved drawing
   if (saves[cur]) { img.onload = function(){ resizeCanvas(); if(saves[cur]) ctx.putImageData(saves[cur],0,0); }; }
   resetZoom();
 }
+window.addEventListener('hashchange', function(){
+  var n = parseInt(location.hash.slice(1));
+  if (!isNaN(n) && n !== cur) goPage(n);
+});
 
 // Tool
 function setTool(t) {
@@ -264,8 +267,14 @@ document.addEventListener('keydown', function(e){
   if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goPage(cur-1);
 });
 
-// Init
-img.src = 'pages/000.jpg';
+// Init - load from hash if present
+var initPage = parseInt(location.hash.slice(1));
+if (!isNaN(initPage) && initPage >= 0 && initPage < TOTAL) cur = initPage;
+img.src = 'pages/' + String(cur).padStart(3,'0') + '.jpg';
+pageInfo.textContent = (cur+1) + ' / ' + TOTAL;
+pageSlider.value = cur;
+prevBtn.disabled = cur === 0;
+nextBtn.disabled = cur === TOTAL - 1;
 resizeCanvas();
 </script>
 </body>
