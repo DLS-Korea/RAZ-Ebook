@@ -23,9 +23,10 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 
 /* Viewer */
 .viewer { position: fixed; top: 48px; left: 0; right: 0; bottom: 48px; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; }
-.page-wrap { position: relative; max-height: 100%; display: flex; align-items: center; justify-content: center; }
-.page-img { max-height: calc(100vh - 96px); max-width: 100vw; display: block; transform-origin: center center; pointer-events: none; user-select: none; }
+.page-wrap { position: relative; display: inline-block; transform-origin: center center; }
+.page-img { max-height: calc(100vh - 96px); max-width: 100vw; display: block; pointer-events: none; user-select: none; }
 .draw-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: default; touch-action: none; }
+.text-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; }
 
 /* Footer nav */
 .footer { display: flex; align-items: center; justify-content: space-between; background: #1a1a1a; border-top: 1px solid #333; padding: 8px 14px; height: 48px; position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; gap: 8px; }
@@ -69,6 +70,7 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
   <div class="page-wrap" id="pageWrap">
     <img class="page-img" id="pageImg" src="pages/000.jpg" draggable="false">
     <canvas class="draw-canvas" id="drawCanvas"></canvas>
+    <div class="text-layer" id="textLayer"></div>
   </div>
 </div>
 
@@ -90,11 +92,14 @@ var scale = 1;
 var tx = 0, ty = 0;
 var isDrawing = false;
 var lastX = 0, lastY = 0;
-var saves = {}; // page -> imageData
+var saves = {};       // page -> canvas imageData
+var textSaves = {};   // page -> array of {x, y, text, color, size}
 
 var img = document.getElementById('pageImg');
 var canvas = document.getElementById('drawCanvas');
 var ctx = canvas.getContext('2d');
+var pageWrap = document.getElementById('pageWrap');
+var textLayer = document.getElementById('textLayer');
 var viewer = document.getElementById('viewer');
 var pageInfo = document.getElementById('pageInfo');
 var pageSlider = document.getElementById('pageSlider');
@@ -103,57 +108,64 @@ var zoomPop = document.getElementById('zoomPop');
 var prevBtn = document.getElementById('prevBtn');
 var nextBtn = document.getElementById('nextBtn');
 
+// ── Canvas resize ──
 function resizeCanvas() {
-  var r = img.getBoundingClientRect();
-  canvas.width = img.naturalWidth || r.width;
-  canvas.height = img.naturalHeight || r.height;
-  canvas.style.width = r.width + 'px';
-  canvas.style.height = r.height + 'px';
-  canvas.style.left = (r.left - img.parentElement.getBoundingClientRect().left) + 'px';
-  canvas.style.top = (r.top - img.parentElement.getBoundingClientRect().top) + 'px';
-  if (saves[cur]) {
-    ctx.putImageData(saves[cur], 0, 0);
-  }
+  canvas.width = img.naturalWidth || img.offsetWidth;
+  canvas.height = img.naturalHeight || img.offsetHeight;
+  canvas.style.width = img.offsetWidth + 'px';
+  canvas.style.height = img.offsetHeight + 'px';
+  textLayer.style.width = img.offsetWidth + 'px';
+  textLayer.style.height = img.offsetHeight + 'px';
+  if (saves[cur]) ctx.putImageData(saves[cur], 0, 0);
+  renderTextBoxes();
 }
 img.onload = resizeCanvas;
 window.addEventListener('resize', resizeCanvas);
 
+// ── Page navigation ──
 function goPage(n) {
   if (n < 0 || n >= TOTAL) return;
   saves[cur] = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  saveTextBoxes();
   cur = n;
   location.hash = cur;
   img.src = 'pages/' + String(cur).padStart(3,'0') + '.jpg';
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  textLayer.innerHTML = '';
   pageInfo.textContent = (cur+1) + ' / ' + TOTAL;
   pageSlider.value = cur;
   prevBtn.disabled = cur === 0;
   nextBtn.disabled = cur === TOTAL - 1;
-  if (saves[cur]) { img.onload = function(){ resizeCanvas(); if(saves[cur]) ctx.putImageData(saves[cur],0,0); }; }
+  img.onload = function() {
+    resizeCanvas();
+    if (saves[cur]) ctx.putImageData(saves[cur], 0, 0);
+    renderTextBoxes();
+  };
   resetZoom();
 }
-window.addEventListener('hashchange', function(){
+window.addEventListener('hashchange', function() {
   var n = parseInt(location.hash.slice(1));
   if (!isNaN(n) && n !== cur) goPage(n);
 });
 
-// Tool
+// ── Tool ──
 function setTool(t) {
   tool = t;
-  document.querySelectorAll('.tool-btn[data-tool]').forEach(function(b){
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(function(b) {
     b.classList.toggle('active', b.dataset.tool === t);
   });
-  if (t === 'pan') canvas.style.cursor = 'grab';
-  else if (t === 'erase') canvas.style.cursor = 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\'><rect x=\'2\' y=\'8\' width=\'20\' height=\'14\' rx=\'2\' fill=\'%23fff\' stroke=\'%23999\' stroke-width=\'2\'/><line x1=\'2\' y1=\'15\' x2=\'22\' y2=\'15\' stroke=\'%23999\' stroke-width=\'1\'/></svg>") 12 20, cell';
-  else if (t === 'text') canvas.style.cursor = 'text';
-  else canvas.style.cursor = 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\'><line x1=\'20\' y1=\'2\' x2=\'4\' y2=\'22\' stroke=\'%23333\' stroke-width=\'3\'/><line x1=\'20\' y1=\'2\' x2=\'4\' y2=\'22\' stroke=\'%23fff\' stroke-width=\'1.5\'/><polygon points=\'2,22 8,20 4,16\' fill=\'%23fff\'/></svg>") 2 22, crosshair';
+  var cur_c = t === 'pan' ? 'grab' : t === 'erase' ? 'cell' : t === 'text' ? 'text' : 'crosshair';
+  canvas.style.cursor = cur_c;
+  textLayer.style.pointerEvents = t === 'text' ? 'all' : 'none';
 }
-document.getElementById('colorPick').oninput = function(e){ penColor = e.target.value; };
-document.getElementById('sizePick').oninput = function(e){ penSize = +e.target.value; };
+document.getElementById('colorPick').oninput = function(e) { penColor = e.target.value; };
+document.getElementById('sizePick').oninput = function(e) { penSize = +e.target.value; };
 
 function clearCanvas() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   saves[cur] = null;
+  textLayer.innerHTML = '';
+  textSaves[cur] = [];
 }
 
 function toggleFS() {
@@ -161,129 +173,74 @@ function toggleFS() {
   else document.exitFullscreen && document.exitFullscreen();
 }
 
-// Zoom
+// ── Zoom (transform on pageWrap) ──
 var zoomTimer;
 function showZoomPop() {
   zoomPop.textContent = Math.round(scale*100)+'%';
   zoomPop.classList.add('show');
   clearTimeout(zoomTimer);
-  zoomTimer = setTimeout(function(){ zoomPop.classList.remove('show'); }, 1000);
+  zoomTimer = setTimeout(function() { zoomPop.classList.remove('show'); }, 1000);
 }
 function applyTransform() {
-  img.style.transform = 'translate('+tx+'px,'+ty+'px) scale('+scale+')';
+  pageWrap.style.transform = 'translate('+tx+'px,'+ty+'px) scale('+scale+')';
   zoomLabel.textContent = Math.round(scale*100)+'%';
 }
 function clampTx() {
-  var r = img.getBoundingClientRect();
-  var vw = viewer.offsetWidth, vh = viewer.offsetHeight;
+  var pw = viewer.offsetWidth, ph = viewer.offsetHeight;
   var iw = img.offsetWidth * scale, ih = img.offsetHeight * scale;
-  if (iw <= vw) tx = 0; else tx = Math.min((iw-vw)/2, Math.max(-(iw-vw)/2, tx));
-  if (ih <= vh) ty = 0; else ty = Math.min((ih-vh)/2, Math.max(-(ih-vh)/2, ty));
+  if (iw <= pw) tx = 0; else { var mx = (iw-pw)/2; tx = Math.min(mx, Math.max(-mx, tx)); }
+  if (ih <= ph) ty = 0; else { var my = (ih-ph)/2; ty = Math.min(my, Math.max(-my, ty)); }
 }
 function zoom(delta) {
-  scale = Math.min(4, Math.max(1, scale + delta));
+  scale = Math.min(4, Math.max(1, scale+delta));
   if (scale === 1) { tx = 0; ty = 0; }
   clampTx(); applyTransform(); showZoomPop();
-  resizeCanvas();
 }
 function resetZoom() {
-  scale = 1; tx = 0; ty = 0; applyTransform(); resizeCanvas();
+  scale = 1; tx = 0; ty = 0; applyTransform();
 }
 
-// Pinch
+// ── Pinch ──
 var pinchDist0 = 0, pinchScale0 = 1;
-viewer.addEventListener('touchstart', function(e){
+viewer.addEventListener('touchstart', function(e) {
   if (e.touches.length === 2) {
     pinchDist0 = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
     pinchScale0 = scale;
   }
 }, {passive:true});
-viewer.addEventListener('touchmove', function(e){
+viewer.addEventListener('touchmove', function(e) {
   if (e.touches.length === 2) {
     e.preventDefault();
     var d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-    scale = Math.min(4, Math.max(1, pinchScale0 * d / pinchDist0));
+    scale = Math.min(4, Math.max(1, pinchScale0*d/pinchDist0));
     clampTx(); applyTransform(); showZoomPop();
   }
 }, {passive:false});
 
-// Drawing
+// ── Drawing ──
 function getPos(e) {
   var rect = canvas.getBoundingClientRect();
   var sx = canvas.width / rect.width;
   var sy = canvas.height / rect.height;
   var cx = e.touches ? e.touches[0].clientX : e.clientX;
   var cy = e.touches ? e.touches[0].clientY : e.clientY;
-  return [(cx - rect.left)*sx, (cy - rect.top)*sy];
+  return [(cx-rect.left)*sx, (cy-rect.top)*sy];
 }
 
 var panSX = 0, panSY = 0, panTX0 = 0, panTY0 = 0;
 
-// Text tool
-var activeTextBox = null;
-function commitTextBox() {
-  if (!activeTextBox) return;
-  var text = activeTextBox.value.trim();
-  if (text) {
-    var rect = canvas.getBoundingClientRect();
-    var sx = canvas.width / rect.width;
-    var sy = canvas.height / rect.height;
-    var boxRect = activeTextBox.getBoundingClientRect();
-    var x = (boxRect.left - rect.left) * sx;
-    var y = (boxRect.top - rect.top) * sy;
-    var fontSize = parseInt(activeTextBox.style.fontSize) * sx;
-    ctx.save();
-    ctx.font = 'bold ' + fontSize + 'px "Segoe UI", sans-serif';
-    ctx.fillStyle = penColor;
-    ctx.globalCompositeOperation = 'source-over';
-    var lines = text.split('\n');
-    lines.forEach(function(line, i) {
-      ctx.fillText(line, x, y + fontSize * 1.3 * (i + 1));
-    });
-    ctx.restore();
-  }
-  document.body.removeChild(activeTextBox);
-  activeTextBox = null;
-}
-function createTextBox(clientX, clientY) {
-  commitTextBox();
-  var box = document.createElement('textarea');
-  box.className = 'text-input-box';
-  box.style.left = clientX + 'px';
-  box.style.top = clientY + 'px';
-  box.style.color = penColor;
-  box.style.fontSize = Math.max(14, penSize * 3) + 'px';
-  box.rows = 1;
-  // auto-grow
-  box.addEventListener('input', function() {
-    box.style.height = 'auto';
-    box.style.height = box.scrollHeight + 'px';
-  });
-  box.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') { document.body.removeChild(box); activeTextBox = null; }
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitTextBox(); }
-    e.stopPropagation(); // prevent page navigation
-  });
-  document.body.appendChild(box);
-  box.focus();
-  activeTextBox = box;
-}
+canvas.addEventListener('mousedown', startDraw);
+canvas.addEventListener('touchstart', startDraw, {passive:true});
+window.addEventListener('mousemove', doDraw);
+window.addEventListener('touchmove', doDraw, {passive:false});
+window.addEventListener('mouseup', endDraw);
+window.addEventListener('touchend', endDraw);
 
-canvas.addEventListener('mousedown', startInteract);
-canvas.addEventListener('touchstart', startInteract, {passive:true});
-window.addEventListener('mousemove', doInteract);
-window.addEventListener('touchmove', doInteract, {passive:false});
-window.addEventListener('mouseup', endInteract);
-window.addEventListener('touchend', endInteract);
-
-function startInteract(e) {
+function startDraw(e) {
+  if (tool === 'text') return;
   if (e.touches && e.touches.length > 1) return;
   var cx = e.touches ? e.touches[0].clientX : e.clientX;
   var cy = e.touches ? e.touches[0].clientY : e.clientY;
-  if (tool === 'text') {
-    createTextBox(cx, cy);
-    return;
-  }
   if (tool === 'pan') {
     panSX = cx; panSY = cy; panTX0 = tx; panTY0 = ty;
     canvas.style.cursor = 'grabbing';
@@ -292,14 +249,13 @@ function startInteract(e) {
     var p = getPos(e); lastX = p[0]; lastY = p[1];
   }
 }
-function doInteract(e) {
+function doDraw(e) {
   if (e.touches && e.touches.length > 1) return;
   var cx = e.touches ? e.touches[0].clientX : e.clientX;
   var cy = e.touches ? e.touches[0].clientY : e.clientY;
-  if (tool === 'pan' && scale > 1) {
+  if (tool === 'pan' && panSX) {
     e.preventDefault && e.preventDefault();
-    tx = panTX0 + (cx - panSX);
-    ty = panTY0 + (cy - panSY);
+    tx = panTX0+(cx-panSX); ty = panTY0+(cy-panSY);
     clampTx(); applyTransform();
   } else if (isDrawing) {
     if (e.cancelable) e.preventDefault();
@@ -317,18 +273,97 @@ function doInteract(e) {
     lastX = p[0]; lastY = p[1];
   }
 }
-function endInteract() {
-  isDrawing = false;
+function endDraw() {
+  isDrawing = false; panSX = 0;
   if (tool === 'pan') canvas.style.cursor = 'grab';
 }
 
-// Keyboard
-document.addEventListener('keydown', function(e){
+// ── Text boxes (HTML layer, saved per page) ──
+function saveTextBoxes() {
+  var boxes = textLayer.querySelectorAll('.tbox');
+  var arr = [];
+  boxes.forEach(function(b) {
+    arr.push({ x: b.style.left, y: b.style.top, text: b.value, color: b.style.color, size: b.style.fontSize });
+  });
+  textSaves[cur] = arr;
+}
+
+function renderTextBoxes() {
+  textLayer.innerHTML = '';
+  var arr = textSaves[cur] || [];
+  arr.forEach(function(d) { addTextBox(null, null, d); });
+}
+
+function addTextBox(clientX, clientY, restore) {
+  var box = document.createElement('textarea');
+  box.className = 'tbox';
+  box.style.position = 'absolute';
+  box.style.background = 'transparent';
+  box.style.border = '2px dashed rgba(0,120,212,0.7)';
+  box.style.outline = 'none';
+  box.style.resize = 'none';
+  box.style.overflow = 'hidden';
+  box.style.padding = '2px 4px';
+  box.style.lineHeight = '1.3';
+  box.style.fontFamily = '"Segoe UI", sans-serif';
+  box.style.fontWeight = 'bold';
+  box.style.borderRadius = '3px';
+  box.rows = 1;
+
+  if (restore) {
+    box.style.left = restore.x;
+    box.style.top = restore.y;
+    box.style.color = restore.color;
+    box.style.fontSize = restore.size;
+    box.value = restore.text;
+  } else {
+    // convert clientX/Y to page-wrap local coords
+    var rect = pageWrap.getBoundingClientRect();
+    var lx = (clientX - rect.left) / scale;
+    var ly = (clientY - rect.top) / scale;
+    box.style.left = lx + 'px';
+    box.style.top = ly + 'px';
+    box.style.color = penColor;
+    box.style.fontSize = Math.max(14, penSize * 3) + 'px';
+  }
+
+  // auto-height
+  function autoH() { box.style.height = 'auto'; box.style.height = box.scrollHeight + 'px'; }
+  box.addEventListener('input', autoH);
+  setTimeout(autoH, 0);
+
+  box.addEventListener('focus', function() { box.style.border = '2px dashed rgba(0,120,212,0.9)'; });
+  box.addEventListener('blur', function() { box.style.border = '2px dashed rgba(0,120,212,0.3)'; });
+  box.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') { textLayer.removeChild(box); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); box.blur(); }
+    e.stopPropagation();
+  });
+
+  textLayer.appendChild(box);
+  if (!restore) setTimeout(function() { box.focus(); }, 0);
+}
+
+// Click on text layer to add box
+textLayer.addEventListener('mousedown', function(e) {
+  if (tool !== 'text') return;
+  if (e.target !== textLayer) return; // clicked existing box
+  addTextBox(e.clientX, e.clientY, null);
+});
+textLayer.addEventListener('touchstart', function(e) {
+  if (tool !== 'text') return;
+  if (e.target !== textLayer) return;
+  addTextBox(e.touches[0].clientX, e.touches[0].clientY, null);
+}, {passive:true});
+
+// ── Keyboard page nav (only when not typing) ──
+document.addEventListener('keydown', function(e) {
+  if (document.activeElement && document.activeElement.tagName === 'TEXTAREA') return;
   if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goPage(cur+1);
   if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goPage(cur-1);
 });
 
-// Init - load from hash if present
+// ── Init ──
 var initPage = parseInt(location.hash.slice(1));
 if (!isNaN(initPage) && initPage >= 0 && initPage < TOTAL) cur = initPage;
 img.src = 'pages/' + String(cur).padStart(3,'0') + '.jpg';
@@ -336,7 +371,7 @@ pageInfo.textContent = (cur+1) + ' / ' + TOTAL;
 pageSlider.value = cur;
 prevBtn.disabled = cur === 0;
 nextBtn.disabled = cur === TOTAL - 1;
-resizeCanvas();
+setTool('draw');
 </script>
 </body>
 </html>
