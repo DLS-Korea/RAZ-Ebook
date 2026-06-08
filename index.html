@@ -47,6 +47,21 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 .tbox:focus { border: 2px dashed rgba(0,120,212,0.8); background: transparent; }
 /* Drag preview rect */
 #dragRect { position: absolute; border: 2px dashed #0078d4; background: rgba(0,120,212,0.08); pointer-events: none; display: none; border-radius: 3px; }
+/* QR modal */
+.qr-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 500; align-items: center; justify-content: center; }
+.qr-modal.show { display: flex; }
+.qr-box { background: #fff; border-radius: 16px; padding: 24px; text-align: center; max-width: 280px; width: 90%; }
+.qr-box h3 { color: #111; font-size: 1rem; margin-bottom: 4px; }
+.qr-box p { color: #666; font-size: 0.75rem; margin-bottom: 16px; word-break: break-all; }
+.qr-box img { width: 200px; height: 200px; }
+.qr-close { margin-top: 16px; background: #333; color: #fff; border: none; border-radius: 8px; padding: 8px 24px; cursor: pointer; font-size: 0.9rem; }
+/* Print */
+@media print {
+  body * { visibility: hidden; }
+  #printArea, #printArea * { visibility: visible; }
+  #printArea { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #printArea img { max-width: 100%; max-height: 100%; }
+}
 </style>
 </head>
 <body>
@@ -67,8 +82,26 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
   <button class="tool-btn" onclick="resetZoom()">1:1</button>
   <div class="sep"></div>
   <button class="tool-btn" onclick="toggleFS()">⛶</button>
+  <button class="tool-btn" onclick="showQR()">📱 QR</button>
+  <button class="tool-btn" onclick="printPage()">🖨️ 인쇄</button>
   <button class="tool-btn red" onclick="clearCanvas()">🗑️</button>
   <span class="page-info" id="pageInfo">1 / 142</span>
+</div>
+
+<!-- QR Modal -->
+<div class="qr-modal" id="qrModal" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="qr-box">
+    <h3>📱 이 페이지 QR</h3>
+    <p id="qrUrl"></p>
+    <img id="qrImg" src="" alt="QR">
+    <br>
+    <button class="qr-close" onclick="document.getElementById('qrModal').classList.remove('show')">닫기</button>
+  </div>
+</div>
+
+<!-- Print area -->
+<div id="printArea" style="display:none">
+  <img id="printImg" src="">
 </div>
 
 <div class="viewer" id="viewer">
@@ -357,6 +390,23 @@ window.addEventListener('mouseup', function(e) {
     color: penColor, size: Math.max(14, penSize*3)+'px', text: '' });
   setTimeout(function() { box.focus(); }, 0);
 });
+
+// ── QR & Print ──
+function showQR() {
+  var url = location.href;
+  var encoded = encodeURIComponent(url);
+  var qrSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encoded;
+  document.getElementById('qrUrl').textContent = url;
+  document.getElementById('qrImg').src = qrSrc;
+  document.getElementById('qrModal').classList.add('show');
+}
+function printPage() {
+  var printImg = document.getElementById('printImg');
+  printImg.src = img.src;
+  document.getElementById('printArea').style.display = 'flex';
+  printImg.onload = function() { window.print(); document.getElementById('printArea').style.display = 'none'; };
+  if (printImg.complete) { window.print(); document.getElementById('printArea').style.display = 'none'; }
+}
 
 // ── Keyboard page nav (only when not typing) ──
 document.addEventListener('keydown', function(e) {
