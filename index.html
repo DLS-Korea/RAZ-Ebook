@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>RAZ Report Level 2-3</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #111; color: #fff; font-family: "Segoe UI", sans-serif; overflow: hidden; }
+
+/* Header */
+.header { display: flex; align-items: center; gap: 10px; background: #1a1a1a; border-bottom: 1px solid #333; padding: 8px 14px; height: 48px; position: fixed; top: 0; left: 0; right: 0; z-index: 100; }
+.title { font-size: 0.95rem; font-weight: bold; flex: 1; }
+.page-info { font-size: 0.8rem; color: #aaa; }
+.tool-btn { background: #333; border: none; color: #fff; border-radius: 7px; padding: 5px 10px; cursor: pointer; font-size: 0.8rem; transition: background .15s; white-space: nowrap; }
+.tool-btn:hover { background: #555; }
+.tool-btn.active { background: #0078d4; }
+.tool-btn.red { background: #7a0000; }
+.tool-btn.red:hover { background: #b00; }
+.sep { width: 1px; height: 22px; background: #444; }
+.color-pick { width: 26px; height: 26px; border-radius: 5px; border: 2px solid #555; cursor: pointer; padding: 0; }
+input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
+
+/* Viewer */
+.viewer { position: fixed; top: 48px; left: 0; right: 0; bottom: 48px; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; }
+.page-wrap { position: relative; max-height: 100%; display: flex; align-items: center; justify-content: center; }
+.page-img { max-height: calc(100vh - 96px); max-width: 100vw; display: block; transform-origin: center center; pointer-events: none; user-select: none; }
+.draw-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+
+/* Footer nav */
+.footer { display: flex; align-items: center; justify-content: space-between; background: #1a1a1a; border-top: 1px solid #333; padding: 8px 14px; height: 48px; position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; gap: 8px; }
+.nav-btn { background: #333; border: none; color: #fff; border-radius: 7px; padding: 6px 16px; cursor: pointer; font-size: 0.85rem; transition: background .15s; }
+.nav-btn:hover:not(:disabled) { background: #555; }
+.nav-btn:disabled { opacity: 0.3; cursor: default; }
+.page-slider { flex: 1; max-width: 300px; accent-color: #0078d4; cursor: pointer; }
+.zoom-ind { font-size: 0.75rem; color: #888; min-width: 36px; text-align: center; }
+
+/* Zoom indicator popup */
+.zoom-pop { position: fixed; bottom: 60px; right: 16px; background: rgba(0,0,0,0.8); color: #fff; padding: 5px 12px; border-radius: 20px; font-size: 0.8rem; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 200; }
+.zoom-pop.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="title">📚 RAZ Report 2-3</span>
+  <button class="tool-btn active" data-tool="draw" onclick="setTool('draw')">✏️</button>
+  <button class="tool-btn" data-tool="erase" onclick="setTool('erase')">🧹</button>
+  <button class="tool-btn" data-tool="pan" onclick="setTool('pan')">✋</button>
+  <div class="sep"></div>
+  <input type="color" id="colorPick" class="color-pick" value="#ff0000">
+  <input type="range" id="sizePick" min="2" max="24" value="5">
+  <div class="sep"></div>
+  <button class="tool-btn" onclick="zoom(0.25)">🔍+</button>
+  <span class="zoom-ind" id="zoomLabel">100%</span>
+  <button class="tool-btn" onclick="zoom(-0.25)">🔍-</button>
+  <button class="tool-btn" onclick="resetZoom()">1:1</button>
+  <div class="sep"></div>
+  <button class="tool-btn" onclick="toggleFS()">⛶</button>
+  <button class="tool-btn red" onclick="clearCanvas()">🗑️</button>
+  <span class="page-info" id="pageInfo">1 / 142</span>
+</div>
+
+<div class="viewer" id="viewer">
+  <div class="page-wrap" id="pageWrap">
+    <img class="page-img" id="pageImg" src="pages/000.jpg" draggable="false">
+    <canvas class="draw-canvas" id="drawCanvas"></canvas>
+  </div>
+</div>
+
+<div class="footer">
+  <button class="nav-btn" id="prevBtn" onclick="goPage(cur-1)" disabled>← 이전</button>
+  <input type="range" class="page-slider" id="pageSlider" min="0" max="141" value="0" oninput="goPage(+this.value)">
+  <button class="nav-btn" id="nextBtn" onclick="goPage(cur+1)">다음 →</button>
+</div>
+
+<div class="zoom-pop" id="zoomPop"></div>
+
+<script>
+var TOTAL = 142;
+var cur = 0;
+var tool = 'draw';
+var penColor = '#ff0000';
+var penSize = 5;
+var scale = 1;
+var tx = 0, ty = 0;
+var isDrawing = false;
+var lastX = 0, lastY = 0;
+var saves = {}; // page -> imageData
+
+var img = document.getElementById('pageImg');
+var canvas = document.getElementById('drawCanvas');
+var ctx = canvas.getContext('2d');
+var viewer = document.getElementById('viewer');
+var pageInfo = document.getElementById('pageInfo');
+var pageSlider = document.getElementById('pageSlider');
+var zoomLabel = document.getElementById('zoomLabel');
+var zoomPop = document.getElementById('zoomPop');
+var prevBtn = document.getElementById('prevBtn');
+var nextBtn = document.getElementById('nextBtn');
+
+function resizeCanvas() {
+  var r = img.getBoundingClientRect();
+  canvas.width = img.naturalWidth || r.width;
+  canvas.height = img.naturalHeight || r.height;
+  canvas.style.width = r.width + 'px';
+  canvas.style.height = r.height + 'px';
+  canvas.style.left = (r.left - img.parentElement.getBoundingClientRect().left) + 'px';
+  canvas.style.top = (r.top - img.parentElement.getBoundingClientRect().top) + 'px';
+  if (saves[cur]) {
+    ctx.putImageData(saves[cur], 0, 0);
+  }
+}
+img.onload = resizeCanvas;
+window.addEventListener('resize', resizeCanvas);
+
+function goPage(n) {
+  if (n < 0 || n >= TOTAL) return;
+  // save current
+  saves[cur] = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  cur = n;
+  img.src = 'pages/' + String(cur).padStart(3,'0') + '.jpg';
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  pageInfo.textContent = (cur+1) + ' / ' + TOTAL;
+  pageSlider.value = cur;
+  prevBtn.disabled = cur === 0;
+  nextBtn.disabled = cur === TOTAL - 1;
+  // restore saved drawing
+  if (saves[cur]) { img.onload = function(){ resizeCanvas(); if(saves[cur]) ctx.putImageData(saves[cur],0,0); }; }
+  resetZoom();
+}
+
+// Tool
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(function(b){
+    b.classList.toggle('active', b.dataset.tool === t);
+  });
+  canvas.style.cursor = t === 'pan' ? 'grab' : (t === 'erase' ? 'cell' : 'crosshair');
+}
+document.getElementById('colorPick').oninput = function(e){ penColor = e.target.value; };
+document.getElementById('sizePick').oninput = function(e){ penSize = +e.target.value; };
+
+function clearCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  saves[cur] = null;
+}
+
+function toggleFS() {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+  else document.exitFullscreen && document.exitFullscreen();
+}
+
+// Zoom
+var zoomTimer;
+function showZoomPop() {
+  zoomPop.textContent = Math.round(scale*100)+'%';
+  zoomPop.classList.add('show');
+  clearTimeout(zoomTimer);
+  zoomTimer = setTimeout(function(){ zoomPop.classList.remove('show'); }, 1000);
+}
+function applyTransform() {
+  img.style.transform = 'translate('+tx+'px,'+ty+'px) scale('+scale+')';
+  zoomLabel.textContent = Math.round(scale*100)+'%';
+}
+function clampTx() {
+  var r = img.getBoundingClientRect();
+  var vw = viewer.offsetWidth, vh = viewer.offsetHeight;
+  var iw = img.offsetWidth * scale, ih = img.offsetHeight * scale;
+  if (iw <= vw) tx = 0; else tx = Math.min((iw-vw)/2, Math.max(-(iw-vw)/2, tx));
+  if (ih <= vh) ty = 0; else ty = Math.min((ih-vh)/2, Math.max(-(ih-vh)/2, ty));
+}
+function zoom(delta) {
+  scale = Math.min(4, Math.max(1, scale + delta));
+  if (scale === 1) { tx = 0; ty = 0; }
+  clampTx(); applyTransform(); showZoomPop();
+  resizeCanvas();
+}
+function resetZoom() {
+  scale = 1; tx = 0; ty = 0; applyTransform(); resizeCanvas();
+}
+
+// Pinch
+var pinchDist0 = 0, pinchScale0 = 1;
+viewer.addEventListener('touchstart', function(e){
+  if (e.touches.length === 2) {
+    pinchDist0 = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    pinchScale0 = scale;
+  }
+}, {passive:true});
+viewer.addEventListener('touchmove', function(e){
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    var d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    scale = Math.min(4, Math.max(1, pinchScale0 * d / pinchDist0));
+    clampTx(); applyTransform(); showZoomPop();
+  }
+}, {passive:false});
+
+// Drawing
+function getPos(e) {
+  var rect = canvas.getBoundingClientRect();
+  var sx = canvas.width / rect.width;
+  var sy = canvas.height / rect.height;
+  var cx = e.touches ? e.touches[0].clientX : e.clientX;
+  var cy = e.touches ? e.touches[0].clientY : e.clientY;
+  return [(cx - rect.left)*sx, (cy - rect.top)*sy];
+}
+
+var panSX = 0, panSY = 0, panTX0 = 0, panTY0 = 0;
+
+canvas.addEventListener('mousedown', startInteract);
+canvas.addEventListener('touchstart', startInteract, {passive:true});
+window.addEventListener('mousemove', doInteract);
+window.addEventListener('touchmove', doInteract, {passive:false});
+window.addEventListener('mouseup', endInteract);
+window.addEventListener('touchend', endInteract);
+
+function startInteract(e) {
+  if (e.touches && e.touches.length > 1) return;
+  var cx = e.touches ? e.touches[0].clientX : e.clientX;
+  var cy = e.touches ? e.touches[0].clientY : e.clientY;
+  if (tool === 'pan') {
+    panSX = cx; panSY = cy; panTX0 = tx; panTY0 = ty;
+    canvas.style.cursor = 'grabbing';
+  } else {
+    isDrawing = true;
+    var p = getPos(e); lastX = p[0]; lastY = p[1];
+  }
+}
+function doInteract(e) {
+  if (e.touches && e.touches.length > 1) return;
+  var cx = e.touches ? e.touches[0].clientX : e.clientX;
+  var cy = e.touches ? e.touches[0].clientY : e.clientY;
+  if (tool === 'pan' && scale > 1) {
+    e.preventDefault && e.preventDefault();
+    tx = panTX0 + (cx - panSX);
+    ty = panTY0 + (cy - panSY);
+    clampTx(); applyTransform();
+  } else if (isDrawing) {
+    if (e.cancelable) e.preventDefault();
+    var p = getPos(e);
+    ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(p[0], p[1]);
+    if (tool === 'erase') {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineWidth = penSize * 5;
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = penColor;
+      ctx.lineWidth = penSize;
+    }
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+    lastX = p[0]; lastY = p[1];
+  }
+}
+function endInteract() {
+  isDrawing = false;
+  if (tool === 'pan') canvas.style.cursor = 'grab';
+}
+
+// Keyboard
+document.addEventListener('keydown', function(e){
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goPage(cur+1);
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goPage(cur-1);
+});
+
+// Init
+img.src = 'pages/000.jpg';
+resizeCanvas();
+</script>
+</body>
+</html>
