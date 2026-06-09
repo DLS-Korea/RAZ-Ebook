@@ -30,9 +30,13 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 
 /* Footer nav */
 .footer { display: flex; align-items: center; justify-content: space-between; background: #1a1a1a; border-top: 1px solid #333; padding: 8px 14px; height: 48px; position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; gap: 8px; }
-.nav-btn { background: #333; border: none; color: #fff; border-radius: 7px; padding: 6px 16px; cursor: pointer; font-size: 0.85rem; transition: background .15s; }
-.nav-btn:hover:not(:disabled) { background: #555; }
-.nav-btn:disabled { opacity: 0.3; cursor: default; }
+.nav-btn { display: none; }
+/* Side arrow buttons */
+.side-arrow { position: fixed; top: 50%; transform: translateY(-50%); z-index: 150; background: rgba(0,0,0,0.35); border: none; color: #fff; font-size: 2rem; width: 44px; height: 80px; cursor: pointer; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: background .15s, opacity .15s; opacity: 0.5; }
+.side-arrow:hover { background: rgba(0,0,0,0.7); opacity: 1; }
+.side-arrow:disabled { opacity: 0.1; cursor: default; pointer-events: none; }
+.side-arrow.left { left: 4px; }
+.side-arrow.right { right: 4px; }
 .page-input-wrap { display: flex; align-items: center; gap: 6px; }
 .page-input-wrap input { width: 56px; background: #333; border: 1px solid #555; color: #fff; border-radius: 6px; padding: 4px 8px; font-size: 1rem; text-align: center; outline: none; }
 .page-input-wrap input:focus { border-color: #0078d4; }
@@ -143,13 +147,16 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 </div>
 
 <div class="footer">
-  <button class="nav-btn" id="prevBtn" onclick="goPage(cur-1)" disabled>← 이전</button>
+  <div style="flex:1"></div>
   <div class="page-input-wrap">
     <input type="number" id="pageInput" min="1" max="140" value="1">
     <span id="pageTotalLabel">/ 140</span>
   </div>
-  <button class="nav-btn" id="nextBtn" onclick="goPage(cur+1)">다음 →</button>
+  <div style="flex:1"></div>
 </div>
+
+<button class="side-arrow left" id="prevBtn" onclick="goPage(cur-1)" disabled>&#8249;</button>
+<button class="side-arrow right" id="nextBtn" onclick="goPage(cur+1)">&#8250;</button>
 
 <div class="zoom-pop" id="zoomPop"></div>
 
