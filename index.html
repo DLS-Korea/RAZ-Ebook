@@ -32,8 +32,8 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 .footer { display: flex; align-items: center; justify-content: space-between; background: #1a1a1a; border-top: 1px solid #333; padding: 8px 14px; height: 48px; position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; gap: 8px; }
 .nav-btn { display: none; }
 /* Side arrow buttons */
-.side-arrow { position: fixed; top: 50%; transform: translateY(-50%); z-index: 150; background: rgba(0,0,0,0.35); border: none; color: #fff; font-size: 2rem; width: 44px; height: 80px; cursor: pointer; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: background .15s, opacity .15s; opacity: 0.5; }
-.side-arrow:hover { background: rgba(0,0,0,0.7); opacity: 1; }
+.side-arrow { position: fixed; top: 50%; transform: translateY(-50%); z-index: 150; background: rgba(0,0,0,0.4); border: none; color: #fff; font-size: 3rem; width: 56px; height: 110px; cursor: pointer; border-radius: 10px; display: flex; align-items: center; justify-content: center; transition: background .15s, opacity .15s; opacity: 0.55; }
+.side-arrow:hover { background: rgba(0,0,0,0.8); opacity: 1; }
 .side-arrow:disabled { opacity: 0.1; cursor: default; pointer-events: none; }
 .side-arrow.left { left: 4px; }
 .side-arrow.right { right: 4px; }
@@ -213,7 +213,10 @@ function resizeCanvas() {
   renderTextBoxes();
 }
 img.onload = resizeCanvas;
-window.addEventListener('resize', resizeCanvas);
+window.addEventListener('resize', function() {
+  resizeCanvas();
+  if (spreadMode) loadSpread();
+});
 
 // ── Page navigation ──
 function goPage(n) {
@@ -266,24 +269,32 @@ function loadSpread() {
   if (left < 0) left = 0;
   var right = left + 1;
 
-  // 뷰어 높이에 맞춰 스케일 계산
+  // 뷰어에 꽉 차게 스케일 계산
   function fitSpread() {
-    var vw = viewer.offsetWidth - 16;
-    var vh = viewer.offsetHeight - 8;
+    var vw = viewer.offsetWidth - 8;
+    var vh = viewer.offsetHeight - 4;
     var iw = imgL.naturalWidth * 2 + 4;
     var ih = imgL.naturalHeight;
     if (!iw || !ih) return;
-    var s = Math.min(vw / iw, vh / ih, 1);
-    spreadWrap.style.transform = 'scale(' + s + ')';
-    spreadWrap.style.transformOrigin = 'center center';
+    var s = Math.min(vw / iw, vh / ih);
+    // 각 이미지 크기를 직접 설정 (scale 대신)
+    var imgW = Math.floor(imgL.naturalWidth * s);
+    var imgH = Math.floor(imgL.naturalHeight * s);
+    imgL.style.width = imgW + 'px';
+    imgL.style.height = imgH + 'px';
+    imgR.style.width = imgW + 'px';
+    imgR.style.height = imgH + 'px';
+    canvasL.style.width = imgW + 'px';
+    canvasL.style.height = imgH + 'px';
+    canvasR.style.width = imgW + 'px';
+    canvasR.style.height = imgH + 'px';
+    spreadWrap.style.transform = '';
   }
 
   imgL.src = 'pages/' + String(left + 1).padStart(3,'0') + '.jpg';
   imgL.onload = function() {
     canvasL.width = imgL.naturalWidth;
     canvasL.height = imgL.naturalHeight;
-    canvasL.style.width = imgL.offsetWidth + 'px';
-    canvasL.style.height = imgL.offsetHeight + 'px';
     if (saves[left]) ctxL.putImageData(saves[left], 0, 0);
     fitSpread();
   };
@@ -295,8 +306,6 @@ function loadSpread() {
     imgR.onload = function() {
       canvasR.width = imgR.naturalWidth;
       canvasR.height = imgR.naturalHeight;
-      canvasR.style.width = imgR.offsetWidth + 'px';
-      canvasR.style.height = imgR.offsetHeight + 'px';
       if (saves[right]) ctxR.putImageData(saves[right], 0, 0);
       fitSpread();
     };
@@ -642,8 +651,13 @@ viewer.addEventListener('touchend', function(e) {
   var dt = Date.now() - swipeStartTime;
   // 빠르고 수평 스와이프만 인식
   if (dt < 400 && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-    if (dx < 0) goPage(cur + 1);
-    else goPage(cur - 1);
+    if (spreadMode) {
+      if (dx < 0 && cur + 2 < TOTAL) { cur += 2; loadSpread(); }
+      else if (dx > 0 && cur >= 2) { cur -= 2; loadSpread(); }
+    } else {
+      if (dx < 0) goPage(cur + 1);
+      else goPage(cur - 1);
+    }
   }
 }, {passive: true});
 
