@@ -57,6 +57,9 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 .qr-box h3 { color: #111; font-size: 1rem; margin-bottom: 4px; }
 .qr-box p { color: #666; font-size: 0.75rem; margin-bottom: 16px; word-break: break-all; }
 .qr-box img { width: 200px; height: 200px; }
+.qr-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.qr-tab { flex: 1; background: #eee; border: none; border-radius: 6px; padding: 6px; cursor: pointer; font-size: 0.8rem; color: #555; }
+.qr-tab.active { background: #0078d4; color: #fff; }
 .qr-close { margin-top: 16px; background: #333; color: #fff; border: none; border-radius: 8px; padding: 8px 24px; cursor: pointer; font-size: 0.9rem; }
 /* Print */
 @media print {
@@ -94,10 +97,20 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 <!-- QR Modal -->
 <div class="qr-modal" id="qrModal" onclick="if(event.target===this)this.classList.remove('show')">
   <div class="qr-box">
-    <h3>📱 이 페이지 QR</h3>
-    <p id="qrUrl"></p>
-    <img id="qrImg" src="" alt="QR">
-    <br>
+    <h3>📱 QR 코드 생성</h3>
+    <div class="qr-tabs">
+      <button class="qr-tab active" onclick="switchQrTab('page')">현재 페이지</button>
+      <button class="qr-tab" onclick="switchQrTab('video')">영상 링크</button>
+    </div>
+    <div id="qrVideoInput" style="display:none;margin-bottom:10px;">
+      <input id="qrVideoUrl" type="url" placeholder="영상 URL 붙여넣기" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid #ccc;font-size:0.85rem;box-sizing:border-box;">
+      <button onclick="generateVideoQR()" style="margin-top:6px;width:100%;background:#0078d4;color:#fff;border:none;border-radius:6px;padding:7px;cursor:pointer;font-size:0.85rem;">QR 생성</button>
+    </div>
+    <p id="qrUrl" style="font-size:0.7rem;color:#888;margin-bottom:8px;word-break:break-all;"></p>
+    <a id="qrLink" href="#" target="_blank">
+      <img id="qrImg" src="" alt="QR" style="cursor:pointer;" title="클릭하면 링크로 이동">
+    </a>
+    <p style="font-size:0.7rem;color:#aaa;margin-top:4px;">↑ 클릭하면 링크 이동 / 스캔하면 바로 접속</p>
     <button class="qr-close" onclick="document.getElementById('qrModal').classList.remove('show')">닫기</button>
   </div>
 </div>
@@ -400,12 +413,29 @@ window.addEventListener('mouseup', function(e) {
 });
 
 // ── QR & Print ──
-function showQR() {
-  var url = location.href;
+var qrTab = 'page';
+function switchQrTab(tab) {
+  qrTab = tab;
+  document.querySelectorAll('.qr-tab').forEach(function(b, i) {
+    b.classList.toggle('active', (i===0 && tab==='page') || (i===1 && tab==='video'));
+  });
+  document.getElementById('qrVideoInput').style.display = tab === 'video' ? 'block' : 'none';
+  if (tab === 'page') generateQR(location.href);
+  else { document.getElementById('qrUrl').textContent = ''; document.getElementById('qrImg').src = ''; document.getElementById('qrLink').href = '#'; }
+}
+function generateQR(url) {
   var encoded = encodeURIComponent(url);
-  var qrSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encoded;
   document.getElementById('qrUrl').textContent = url;
-  document.getElementById('qrImg').src = qrSrc;
+  document.getElementById('qrImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encoded;
+  document.getElementById('qrLink').href = url;
+}
+function generateVideoQR() {
+  var url = document.getElementById('qrVideoUrl').value.trim();
+  if (!url) return;
+  generateQR(url);
+}
+function showQR() {
+  switchQrTab('page');
   document.getElementById('qrModal').classList.add('show');
 }
 function printPage() {
