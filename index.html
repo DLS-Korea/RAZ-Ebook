@@ -33,7 +33,10 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 .nav-btn { background: #333; border: none; color: #fff; border-radius: 7px; padding: 6px 16px; cursor: pointer; font-size: 0.85rem; transition: background .15s; }
 .nav-btn:hover:not(:disabled) { background: #555; }
 .nav-btn:disabled { opacity: 0.3; cursor: default; }
-.page-slider { flex: 1; max-width: 300px; accent-color: #0078d4; cursor: pointer; }
+.page-input-wrap { display: flex; align-items: center; gap: 6px; }
+.page-input-wrap input { width: 56px; background: #333; border: 1px solid #555; color: #fff; border-radius: 6px; padding: 4px 8px; font-size: 1rem; text-align: center; outline: none; }
+.page-input-wrap input:focus { border-color: #0078d4; }
+.page-input-wrap span { color: #aaa; font-size: 0.9rem; white-space: nowrap; }
 .zoom-ind { font-size: 0.75rem; color: #888; min-width: 36px; text-align: center; }
 
 /* Text input box */
@@ -115,7 +118,10 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 
 <div class="footer">
   <button class="nav-btn" id="prevBtn" onclick="goPage(cur-1)" disabled>← 이전</button>
-  <input type="range" class="page-slider" id="pageSlider" min="0" max="141" value="0" oninput="goPage(+this.value)">
+  <div class="page-input-wrap">
+    <input type="number" id="pageInput" min="1" max="142" value="1">
+    <span id="pageTotalLabel">/ 142</span>
+  </div>
   <button class="nav-btn" id="nextBtn" onclick="goPage(cur+1)">다음 →</button>
 </div>
 
@@ -141,7 +147,6 @@ var pageWrap = document.getElementById('pageWrap');
 var textLayer = document.getElementById('textLayer');
 var viewer = document.getElementById('viewer');
 var pageInfo = document.getElementById('pageInfo');
-var pageSlider = document.getElementById('pageSlider');
 var zoomLabel = document.getElementById('zoomLabel');
 var zoomPop = document.getElementById('zoomPop');
 var prevBtn = document.getElementById('prevBtn');
@@ -172,7 +177,7 @@ function goPage(n) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   textLayer.innerHTML = '';
   pageInfo.textContent = (cur+1) + ' / ' + TOTAL;
-  pageSlider.value = cur;
+  document.getElementById('pageInput').value = cur + 1;
   prevBtn.disabled = cur === 0;
   nextBtn.disabled = cur === TOTAL - 1;
   img.onload = function() {
@@ -189,6 +194,8 @@ window.addEventListener('hashchange', function() {
 
 // ── Tool ──
 function setTool(t) {
+  // 같은 도구 다시 클릭하면 해제
+  if (t === tool) t = 'none';
   tool = t;
   document.querySelectorAll('.tool-btn[data-tool]').forEach(function(b) {
     b.classList.toggle('active', b.dataset.tool === t);
@@ -408,9 +415,40 @@ function printPage() {
   if (printImg.complete) { window.print(); document.getElementById('printArea').style.display = 'none'; }
 }
 
+// ── Page number input ──
+var pageInput = document.getElementById('pageInput');
+pageInput.addEventListener('change', function() {
+  var n = parseInt(this.value) - 1;
+  if (!isNaN(n)) goPage(Math.min(TOTAL-1, Math.max(0, n)));
+});
+pageInput.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') this.blur();
+  e.stopPropagation();
+});
+
+// ── Swipe navigation ──
+var swipeStartX = 0, swipeStartY = 0, swipeStartTime = 0;
+viewer.addEventListener('touchstart', function(e) {
+  if (e.touches.length !== 1) return;
+  swipeStartX = e.touches[0].clientX;
+  swipeStartY = e.touches[0].clientY;
+  swipeStartTime = Date.now();
+}, {passive: true});
+viewer.addEventListener('touchend', function(e) {
+  if (tool === 'draw' || tool === 'erase' || tool === 'text') return;
+  var dx = e.changedTouches[0].clientX - swipeStartX;
+  var dy = e.changedTouches[0].clientY - swipeStartY;
+  var dt = Date.now() - swipeStartTime;
+  // 빠르고 수평 스와이프만 인식
+  if (dt < 400 && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    if (dx < 0) goPage(cur + 1);
+    else goPage(cur - 1);
+  }
+}, {passive: true});
+
 // ── Keyboard page nav (only when not typing) ──
 document.addEventListener('keydown', function(e) {
-  if (document.activeElement && document.activeElement.tagName === 'TEXTAREA') return;
+  if (document.activeElement && (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT')) return;
   if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goPage(cur+1);
   if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goPage(cur-1);
 });
@@ -420,7 +458,7 @@ var initPage = parseInt(location.hash.slice(1));
 if (!isNaN(initPage) && initPage >= 0 && initPage < TOTAL) cur = initPage;
 img.src = 'pages/' + String(cur).padStart(3,'0') + '.jpg';
 pageInfo.textContent = (cur+1) + ' / ' + TOTAL;
-pageSlider.value = cur;
+document.getElementById('pageInput').value = cur + 1;
 prevBtn.disabled = cur === 0;
 nextBtn.disabled = cur === TOTAL - 1;
 setTool('none');
