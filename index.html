@@ -57,6 +57,7 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 .qr-box h3 { color: #111; font-size: 1rem; margin-bottom: 4px; }
 .qr-box p { color: #666; font-size: 0.75rem; margin-bottom: 16px; word-break: break-all; }
 .qr-box img { width: 200px; height: 200px; }
+.qr-box { max-width: 340px; }
 .qr-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
 .qr-tab { flex: 1; background: #eee; border: none; border-radius: 6px; padding: 6px; cursor: pointer; font-size: 0.8rem; color: #555; }
 .qr-tab.active { background: #0078d4; color: #fff; }
@@ -97,21 +98,32 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 <!-- QR Modal -->
 <div class="qr-modal" id="qrModal" onclick="if(event.target===this)this.classList.remove('show')">
   <div class="qr-box">
-    <h3>📱 QR 코드 생성</h3>
     <div class="qr-tabs">
-      <button class="qr-tab active" onclick="switchQrTab('page')">현재 페이지</button>
-      <button class="qr-tab" onclick="switchQrTab('video')">영상 링크</button>
+      <button class="qr-tab active" onclick="switchQrTab('page')">📄 현재 페이지 QR</button>
+      <button class="qr-tab" onclick="switchQrTab('video')">🎬 영상 재생</button>
     </div>
-    <div id="qrVideoInput" style="display:none;margin-bottom:10px;">
-      <input id="qrVideoUrl" type="url" placeholder="영상 URL 붙여넣기" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid #ccc;font-size:0.85rem;box-sizing:border-box;">
-      <button onclick="generateVideoQR()" style="margin-top:6px;width:100%;background:#0078d4;color:#fff;border:none;border-radius:6px;padding:7px;cursor:pointer;font-size:0.85rem;">QR 생성</button>
+
+    <!-- 페이지 QR 탭 -->
+    <div id="tabPage">
+      <p id="qrUrl" style="font-size:0.7rem;color:#888;margin-bottom:8px;word-break:break-all;"></p>
+      <a id="qrLink" href="#" target="_blank">
+        <img id="qrImg" src="" alt="QR" style="cursor:pointer;" title="클릭하면 링크로 이동">
+      </a>
+      <p style="font-size:0.7rem;color:#aaa;margin-top:6px;">스캔 또는 클릭하면 이 페이지로 이동</p>
     </div>
-    <p id="qrUrl" style="font-size:0.7rem;color:#888;margin-bottom:8px;word-break:break-all;"></p>
-    <a id="qrLink" href="#" target="_blank">
-      <img id="qrImg" src="" alt="QR" style="cursor:pointer;" title="클릭하면 링크로 이동">
-    </a>
-    <p style="font-size:0.7rem;color:#aaa;margin-top:4px;">↑ 클릭하면 링크 이동 / 스캔하면 바로 접속</p>
-    <button class="qr-close" onclick="document.getElementById('qrModal').classList.remove('show')">닫기</button>
+
+    <!-- 영상 탭 -->
+    <div id="tabVideo" style="display:none;">
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <input id="qrVideoUrl" type="url" placeholder="YouTube 또는 영상 URL" style="flex:1;padding:6px 8px;border-radius:6px;border:1px solid #ccc;font-size:0.82rem;box-sizing:border-box;">
+        <button onclick="playVideo()" style="background:#0078d4;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.85rem;white-space:nowrap;">▶ 재생</button>
+      </div>
+      <div id="videoContainer" style="width:100%;background:#000;border-radius:8px;overflow:hidden;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;">
+        <span style="color:#666;font-size:0.85rem;">URL을 입력하고 재생을 누르세요</span>
+      </div>
+    </div>
+
+    <button class="qr-close" onclick="closeQrModal()">닫기</button>
   </div>
 </div>
 
@@ -413,30 +425,44 @@ window.addEventListener('mouseup', function(e) {
 });
 
 // ── QR & Print ──
-var qrTab = 'page';
 function switchQrTab(tab) {
-  qrTab = tab;
   document.querySelectorAll('.qr-tab').forEach(function(b, i) {
     b.classList.toggle('active', (i===0 && tab==='page') || (i===1 && tab==='video'));
   });
-  document.getElementById('qrVideoInput').style.display = tab === 'video' ? 'block' : 'none';
-  if (tab === 'page') generateQR(location.href);
-  else { document.getElementById('qrUrl').textContent = ''; document.getElementById('qrImg').src = ''; document.getElementById('qrLink').href = '#'; }
+  document.getElementById('tabPage').style.display = tab === 'page' ? 'block' : 'none';
+  document.getElementById('tabVideo').style.display = tab === 'video' ? 'block' : 'none';
 }
-function generateQR(url) {
+function showQR() {
+  var url = location.href;
   var encoded = encodeURIComponent(url);
   document.getElementById('qrUrl').textContent = url;
   document.getElementById('qrImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encoded;
   document.getElementById('qrLink').href = url;
-}
-function generateVideoQR() {
-  var url = document.getElementById('qrVideoUrl').value.trim();
-  if (!url) return;
-  generateQR(url);
-}
-function showQR() {
   switchQrTab('page');
   document.getElementById('qrModal').classList.add('show');
+}
+function closeQrModal() {
+  // 영상 정지
+  var vc = document.getElementById('videoContainer');
+  vc.innerHTML = '<span style="color:#666;font-size:0.85rem;">URL을 입력하고 재생을 누르세요</span>';
+  document.getElementById('qrVideoUrl').value = '';
+  document.getElementById('qrModal').classList.remove('show');
+}
+function playVideo() {
+  var url = document.getElementById('qrVideoUrl').value.trim();
+  if (!url) return;
+  var vc = document.getElementById('videoContainer');
+  var embedSrc = '';
+
+  // YouTube
+  var ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+  if (ytMatch) {
+    embedSrc = 'https://www.youtube.com/embed/' + ytMatch[1] + '?autoplay=1';
+    vc.innerHTML = '<iframe width="100%" height="100%" src="' + embedSrc + '" frameborder="0" allow="autoplay; fullscreen" allowfullscreen style="display:block;"></iframe>';
+    return;
+  }
+  // 일반 영상 파일
+  vc.innerHTML = '<video src="' + url + '" controls autoplay style="width:100%;height:100%;display:block;"></video>';
 }
 function printPage() {
   var printImg = document.getElementById('printImg');
