@@ -442,7 +442,13 @@ function showQR() {
   document.getElementById('qrImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encoded;
   document.getElementById('qrLink').href = url;
 
+  // 현재 페이지 영상 없으면 가장 가까운 이전 페이지 영상 찾기
   var pageVideo = PAGE_VIDEOS[cur];
+  if (!pageVideo) {
+    for (var i = cur - 1; i >= 0; i--) {
+      if (PAGE_VIDEOS[i]) { pageVideo = PAGE_VIDEOS[i]; break; }
+    }
+  }
   if (pageVideo) {
     document.getElementById('qrVideoUrl').value = pageVideo;
     switchQrTab('video');
