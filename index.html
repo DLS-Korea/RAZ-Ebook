@@ -93,6 +93,7 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
   <button class="tool-btn" onclick="resetZoom()">1:1</button>
   <div class="sep"></div>
   <button class="tool-btn" onclick="toggleFS()">⛶</button>
+  <button class="tool-btn" id="spreadBtn" onclick="toggleSpread()">📖 2페이지</button>
   <button class="tool-btn" onclick="showQR()">📱 QR</button>
   <button class="tool-btn" onclick="printPage()">🖨️ 인쇄</button>
   <button class="tool-btn red" onclick="clearCanvas()">🗑️</button>
@@ -138,11 +139,25 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 </div>
 
 <div class="viewer" id="viewer">
+  <!-- 1페이지 모드 -->
   <div class="page-wrap" id="pageWrap">
     <img class="page-img" id="pageImg" src="pages/000.jpg" draggable="false">
     <canvas class="draw-canvas" id="drawCanvas"></canvas>
     <div id="dragRect"></div>
     <div class="text-layer" id="textLayer"></div>
+  </div>
+  <!-- 2페이지 모드 (기본 숨김) -->
+  <div id="spreadWrap" style="display:none; flex-direction:row; align-items:center; gap:4px; transform-origin:center center;">
+    <div class="page-wrap" id="pageWrapL" style="position:relative; display:inline-block;">
+      <img class="page-img" id="pageImgL" src="" draggable="false">
+      <canvas class="draw-canvas" id="drawCanvasL"></canvas>
+      <div class="text-layer" id="textLayerL"></div>
+    </div>
+    <div class="page-wrap" id="pageWrapR" style="position:relative; display:inline-block;">
+      <img class="page-img" id="pageImgR" src="" draggable="false">
+      <canvas class="draw-canvas" id="drawCanvasR"></canvas>
+      <div class="text-layer" id="textLayerR"></div>
+    </div>
   </div>
 </div>
 
@@ -163,8 +178,8 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 <script>
 var TOTAL = 140; // pages 001.jpg ~ 140.jpg (skip 000, 141)
 var cur = 0;
-var TOTAL = 140;
 var tool = 'none';
+var spreadMode = false;
 var penColor = '#ff0000';
 var penSize = 5;
 var scale = 1;
@@ -225,6 +240,104 @@ window.addEventListener('hashchange', function() {
   var n = parseInt(location.hash.slice(1));
   if (!isNaN(n) && n !== cur) goPage(n);
 });
+
+// ── 2페이지 spread 모드 ──
+var spreadWrap = document.getElementById('spreadWrap');
+var imgL = document.getElementById('pageImgL');
+var imgR = document.getElementById('pageImgR');
+var canvasL = document.getElementById('drawCanvasL');
+var canvasR = document.getElementById('drawCanvasR');
+var ctxL = canvasL.getContext('2d');
+var ctxR = canvasR.getContext('2d');
+var textLayerL = document.getElementById('textLayerL');
+var textLayerR = document.getElementById('textLayerR');
+
+function resizeSpreadCanvas(imgEl, cvs, pg) {
+  cvs.width = imgEl.naturalWidth || imgEl.offsetWidth;
+  cvs.height = imgEl.naturalHeight || imgEl.offsetHeight;
+  cvs.style.width = imgEl.offsetWidth + 'px';
+  cvs.style.height = imgEl.offsetHeight + 'px';
+  if (saves[pg]) (pg === cur ? ctxL : ctxR).putImageData(saves[pg], 0, 0);
+}
+
+function loadSpread() {
+  // cur을 짝수로 맞추기 (항상 왼쪽이 짝수 페이지)
+  var left = cur % 2 === 0 ? cur : cur - 1;
+  if (left < 0) left = 0;
+  var right = left + 1;
+
+  // 뷰어 높이에 맞춰 스케일 계산
+  function fitSpread() {
+    var vw = viewer.offsetWidth - 16;
+    var vh = viewer.offsetHeight - 8;
+    var iw = imgL.naturalWidth * 2 + 4;
+    var ih = imgL.naturalHeight;
+    if (!iw || !ih) return;
+    var s = Math.min(vw / iw, vh / ih, 1);
+    spreadWrap.style.transform = 'scale(' + s + ')';
+    spreadWrap.style.transformOrigin = 'center center';
+  }
+
+  imgL.src = 'pages/' + String(left + 1).padStart(3,'0') + '.jpg';
+  imgL.onload = function() {
+    canvasL.width = imgL.naturalWidth;
+    canvasL.height = imgL.naturalHeight;
+    canvasL.style.width = imgL.offsetWidth + 'px';
+    canvasL.style.height = imgL.offsetHeight + 'px';
+    if (saves[left]) ctxL.putImageData(saves[left], 0, 0);
+    fitSpread();
+  };
+
+  if (right < TOTAL) {
+    imgR.style.display = '';
+    document.getElementById('pageWrapR').style.display = '';
+    imgR.src = 'pages/' + String(right + 1).padStart(3,'0') + '.jpg';
+    imgR.onload = function() {
+      canvasR.width = imgR.naturalWidth;
+      canvasR.height = imgR.naturalHeight;
+      canvasR.style.width = imgR.offsetWidth + 'px';
+      canvasR.style.height = imgR.offsetHeight + 'px';
+      if (saves[right]) ctxR.putImageData(saves[right], 0, 0);
+      fitSpread();
+    };
+  } else {
+    imgR.style.display = 'none';
+    document.getElementById('pageWrapR').style.display = 'none';
+  }
+
+  cur = left;
+  location.hash = cur;
+  pageInfo.textContent = (left+1) + (right < TOTAL ? '-' + (right+1) : '') + ' / ' + TOTAL;
+  document.getElementById('pageInput').value = left + 1;
+  prevBtn.disabled = cur === 0;
+  nextBtn.disabled = cur >= TOTAL - 2;
+}
+
+function toggleSpread() {
+  spreadMode = !spreadMode;
+  var btn = document.getElementById('spreadBtn');
+  if (spreadMode) {
+    // 1페이지 → 2페이지
+    saves[cur] = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    saveTextBoxes();
+    pageWrap.style.display = 'none';
+    spreadWrap.style.display = 'flex';
+    btn.classList.add('active');
+    loadSpread();
+    // 화살표: 2페이지씩 이동
+    prevBtn.onclick = function() { if (cur >= 2) { cur -= 2; loadSpread(); } };
+    nextBtn.onclick = function() { if (cur + 2 < TOTAL) { cur += 2; loadSpread(); } };
+  } else {
+    // 2페이지 → 1페이지
+    spreadWrap.style.display = 'none';
+    pageWrap.style.display = '';
+    btn.classList.remove('active');
+    // 화살표 원래대로
+    prevBtn.onclick = function() { goPage(cur - 1); };
+    nextBtn.onclick = function() { goPage(cur + 1); };
+    goPage(cur);
+  }
+}
 
 // ── Tool ──
 function setTool(t) {
