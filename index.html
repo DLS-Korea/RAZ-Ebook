@@ -360,11 +360,8 @@ function setTool(t) {
   document.querySelectorAll('.tool-btn[data-tool]').forEach(function(b) {
     b.classList.toggle('active', b.dataset.tool === t);
   });
-  if (t === 'pan') canvas.style.cursor = 'grab';
-  else if (t === 'erase') canvas.style.cursor = 'cell';
-  else if (t === 'text') canvas.style.cursor = 'default';
-  else if (t === 'draw') canvas.style.cursor = 'crosshair';
-  else canvas.style.cursor = 'default';
+  var cur_cursor = t === 'pan' ? 'grab' : t === 'erase' ? 'cell' : t === 'draw' ? 'crosshair' : 'default';
+  [canvas, canvasL, canvasR].forEach(function(c) { c.style.cursor = cur_cursor; });
   textLayer.style.pointerEvents = t === 'text' ? 'all' : 'none';
   textLayerL.style.pointerEvents = t === 'text' ? 'all' : 'none';
   textLayerR.style.pointerEvents = t === 'text' ? 'all' : 'none';
@@ -459,12 +456,18 @@ function getPos(e) {
 var panSX = 0, panSY = 0, panTX0 = 0, panTY0 = 0;
 
 function attachDrawCanvas(cvs, cvsCtx, pageOffset) {
-  cvs.addEventListener('mousedown', function(e) { startDrawOn(e, cvs, cvsCtx, pageOffset); });
-  cvs.addEventListener('touchstart', function(e) { startDrawOn(e, cvs, cvsCtx, pageOffset); }, {passive:true});
+  cvs.addEventListener('mousedown', function(e) {
+    startDrawOn(e, cvs, cvsCtx, pageOffset);
+    e.stopPropagation();
+  });
+  cvs.addEventListener('touchstart', function(e) {
+    startDrawOn(e, cvs, cvsCtx, pageOffset);
+    if (tool !== 'none' && tool !== 'text') e.stopPropagation();
+  }, {passive:false});
 }
 attachDrawCanvas(canvas, ctx, 0);
-attachDrawCanvas(canvasL, ctxL, 0); // left page = cur
-attachDrawCanvas(canvasR, ctxR, 1); // right page = cur+1
+attachDrawCanvas(canvasL, ctxL, 0);
+attachDrawCanvas(canvasR, ctxR, 1);
 
 window.addEventListener('mousemove', doDraw);
 window.addEventListener('touchmove', doDraw, {passive:false});
@@ -514,7 +517,7 @@ function doDraw(e) {
 function endDraw() {
   if (isDrawing && activePage !== undefined) saves[activePage] = activeCtx.getImageData(0,0,activeCanvas.width,activeCanvas.height);
   isDrawing = false; panSX = 0;
-  if (tool === 'pan') { canvas.style.cursor = 'grab'; canvasL.style.cursor = 'grab'; canvasR.style.cursor = 'grab'; }
+  if (tool === 'pan') { [canvas, canvasL, canvasR].forEach(function(c){c.style.cursor='grab';}); }
 }
 
 // ── Text boxes ──
