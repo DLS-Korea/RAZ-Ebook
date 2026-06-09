@@ -117,6 +117,7 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
       <div style="display:flex;gap:6px;margin-bottom:10px;">
         <input id="qrVideoUrl" type="url" placeholder="YouTube 또는 영상 URL" style="flex:1;padding:6px 8px;border-radius:6px;border:1px solid #ccc;font-size:0.82rem;box-sizing:border-box;">
         <button onclick="playVideo()" style="background:#0078d4;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.85rem;white-space:nowrap;">▶ 재생</button>
+        <button onclick="clearVideo()" style="background:#555;color:#fff;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:0.85rem;" title="저장된 영상 삭제">✕</button>
       </div>
       <div id="videoContainer" style="width:100%;background:#000;border-radius:8px;overflow:hidden;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;">
         <span style="color:#666;font-size:0.85rem;">URL을 입력하고 재생을 누르세요</span>
@@ -438,8 +439,22 @@ function showQR() {
   document.getElementById('qrUrl').textContent = url;
   document.getElementById('qrImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encoded;
   document.getElementById('qrLink').href = url;
-  switchQrTab('page');
+
+  var saved = localStorage.getItem('videoUrl');
+  if (saved) {
+    document.getElementById('qrVideoUrl').value = saved;
+    switchQrTab('video');
+    playVideo();
+  } else {
+    switchQrTab('video');
+  }
   document.getElementById('qrModal').classList.add('show');
+}
+function clearVideo() {
+  localStorage.removeItem('videoUrl');
+  document.getElementById('qrVideoUrl').value = '';
+  var vc = document.getElementById('videoContainer');
+  vc.innerHTML = '<span style="color:#666;font-size:0.85rem;">URL을 입력하고 재생을 누르세요</span>';
 }
 function closeQrModal() {
   // 영상 정지
@@ -451,6 +466,7 @@ function closeQrModal() {
 function playVideo() {
   var url = document.getElementById('qrVideoUrl').value.trim();
   if (!url) return;
+  localStorage.setItem('videoUrl', url); // 저장
   var vc = document.getElementById('videoContainer');
   var embedSrc = '';
 
