@@ -171,8 +171,8 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
   <div style="flex:1"></div>
 </div>
 
-<button class="side-arrow left" id="prevBtn" onclick="goPage(cur-1)" disabled>&#8249;</button>
-<button class="side-arrow right" id="nextBtn" onclick="goPage(cur+1)">&#8250;</button>
+<button class="side-arrow left" id="prevBtn" disabled>&#8249;</button>
+<button class="side-arrow right" id="nextBtn">&#8250;</button>
 
 <div class="zoom-pop" id="zoomPop"></div>
 
@@ -335,17 +335,11 @@ function toggleSpread() {
     spreadWrap.style.display = 'flex';
     btn.classList.add('active');
     loadSpread();
-    // 화살표: 2페이지씩 이동
-    prevBtn.onclick = function() { if (cur >= 2) { cur -= 2; loadSpread(); } };
-    nextBtn.onclick = function() { if (cur + 2 < TOTAL) { cur += 2; loadSpread(); } };
   } else {
     // 2페이지 → 1페이지
     spreadWrap.style.display = 'none';
     pageWrap.style.display = '';
     btn.classList.remove('active');
-    // 화살표 원래대로
-    prevBtn.onclick = function() { goPage(cur - 1); };
-    nextBtn.onclick = function() { goPage(cur + 1); };
     goPage(cur);
   }
 }
@@ -675,11 +669,31 @@ viewer.addEventListener('touchend', function(e) {
   }
 }, {passive: true});
 
+// ── Arrow button click handlers ──
+prevBtn.addEventListener('click', function() {
+  if (spreadMode) {
+    if (cur >= 2) { cur -= 2; loadSpread(); }
+  } else {
+    goPage(cur - 1);
+  }
+});
+nextBtn.addEventListener('click', function() {
+  if (spreadMode) {
+    if (cur + 2 < TOTAL) { cur += 2; loadSpread(); }
+  } else {
+    goPage(cur + 1);
+  }
+});
+
 // ── Keyboard page nav (only when not typing) ──
 document.addEventListener('keydown', function(e) {
   if (document.activeElement && (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT')) return;
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goPage(cur+1);
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goPage(cur-1);
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    if (spreadMode) { if (cur + 2 < TOTAL) { cur += 2; loadSpread(); } } else goPage(cur+1);
+  }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    if (spreadMode) { if (cur >= 2) { cur -= 2; loadSpread(); } } else goPage(cur-1);
+  }
 });
 
 // ── Init ──
