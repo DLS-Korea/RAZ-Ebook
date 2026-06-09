@@ -322,6 +322,11 @@ function loadSpread() {
   document.getElementById('pageInput').value = left + 1;
   prevBtn.disabled = cur === 0;
   nextBtn.disabled = cur >= TOTAL - 2;
+  renderSpreadTextBoxes(left, right < TOTAL ? right : left);
+  // textLayer pointer events
+  var isText = tool === 'text';
+  textLayerL.style.pointerEvents = isText ? 'all' : 'none';
+  textLayerR.style.pointerEvents = isText ? 'all' : 'none';
 }
 
 function toggleSpread() {
@@ -336,7 +341,10 @@ function toggleSpread() {
     btn.classList.add('active');
     loadSpread();
   } else {
-    // 2페이지 → 1페이지
+    // 2페이지 → 1페이지: spread 필기 저장
+    saves[cur] = ctxL.getImageData(0, 0, canvasL.width, canvasL.height);
+    if (cur+1 < TOTAL) saves[cur+1] = ctxR.getImageData(0, 0, canvasR.width, canvasR.height);
+    saveTextBoxes();
     spreadWrap.style.display = 'none';
     pageWrap.style.display = '';
     btn.classList.remove('active');
@@ -358,15 +366,25 @@ function setTool(t) {
   else if (t === 'draw') canvas.style.cursor = 'crosshair';
   else canvas.style.cursor = 'default';
   textLayer.style.pointerEvents = t === 'text' ? 'all' : 'none';
+  textLayerL.style.pointerEvents = t === 'text' ? 'all' : 'none';
+  textLayerR.style.pointerEvents = t === 'text' ? 'all' : 'none';
 }
 document.getElementById('colorPick').oninput = function(e) { penColor = e.target.value; };
 document.getElementById('sizePick').oninput = function(e) { penSize = +e.target.value; };
 
 function clearCanvas() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  saves[cur] = null;
-  textLayer.innerHTML = '';
-  textSaves[cur] = [];
+  if (spreadMode) {
+    ctxL.clearRect(0, 0, canvasL.width, canvasL.height);
+    ctxR.clearRect(0, 0, canvasR.width, canvasR.height);
+    saves[cur] = null; saves[cur+1] = null;
+    textLayerL.innerHTML = ''; textLayerR.innerHTML = '';
+    textSaves[cur] = []; textSaves[cur+1] = [];
+  } else {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    saves[cur] = null;
+    textLayer.innerHTML = '';
+    textSaves[cur] = [];
+  }
 }
 
 function toggleFS() {
@@ -426,10 +444,13 @@ viewer.addEventListener('touchmove', function(e) {
 }, {passive:false});
 
 // ── Drawing ──
+// 현재 그리는 캔버스/컨텍스트/페이지 추적
+var activeCanvas = canvas, activeCtx = ctx, activePage = 0;
+
 function getPos(e) {
-  var rect = canvas.getBoundingClientRect();
-  var sx = canvas.width / rect.width;
-  var sy = canvas.height / rect.height;
+  var rect = activeCanvas.getBoundingClientRect();
+  var sx = activeCanvas.width / rect.width;
+  var sy = activeCanvas.height / rect.height;
   var cx = e.touches ? e.touches[0].clientX : e.clientX;
   var cy = e.touches ? e.touches[0].clientY : e.clientY;
   return [(cx-rect.left)*sx, (cy-rect.top)*sy];
@@ -437,26 +458,35 @@ function getPos(e) {
 
 var panSX = 0, panSY = 0, panTX0 = 0, panTY0 = 0;
 
-canvas.addEventListener('mousedown', startDraw);
-canvas.addEventListener('touchstart', startDraw, {passive:true});
+function attachDrawCanvas(cvs, cvsCtx, pageOffset) {
+  cvs.addEventListener('mousedown', function(e) { startDrawOn(e, cvs, cvsCtx, pageOffset); });
+  cvs.addEventListener('touchstart', function(e) { startDrawOn(e, cvs, cvsCtx, pageOffset); }, {passive:true});
+}
+attachDrawCanvas(canvas, ctx, 0);
+attachDrawCanvas(canvasL, ctxL, 0); // left page = cur
+attachDrawCanvas(canvasR, ctxR, 1); // right page = cur+1
+
 window.addEventListener('mousemove', doDraw);
 window.addEventListener('touchmove', doDraw, {passive:false});
 window.addEventListener('mouseup', endDraw);
 window.addEventListener('touchend', endDraw);
 
-function startDraw(e) {
+function startDrawOn(e, cvs, cvsCtx, pageOffset) {
   if (tool === 'text' || tool === 'none') return;
   if (e.touches && e.touches.length > 1) return;
+  activeCanvas = cvs; activeCtx = cvsCtx;
+  activePage = spreadMode ? cur + pageOffset : cur;
   var cx = e.touches ? e.touches[0].clientX : e.clientX;
   var cy = e.touches ? e.touches[0].clientY : e.clientY;
   if (tool === 'pan') {
     panSX = cx; panSY = cy; panTX0 = tx; panTY0 = ty;
-    canvas.style.cursor = 'grabbing';
+    cvs.style.cursor = 'grabbing';
   } else {
     isDrawing = true;
     var p = getPos(e); lastX = p[0]; lastY = p[1];
   }
 }
+function startDraw(e) { startDrawOn(e, canvas, ctx, 0); }
 function doDraw(e) {
   if (e.touches && e.touches.length > 1) return;
   var cx = e.touches ? e.touches[0].clientX : e.clientX;
@@ -468,48 +498,78 @@ function doDraw(e) {
   } else if (isDrawing) {
     if (e.cancelable) e.preventDefault();
     var p = getPos(e);
-    ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(p[0], p[1]);
+    activeCtx.beginPath(); activeCtx.moveTo(lastX, lastY); activeCtx.lineTo(p[0], p[1]);
     if (tool === 'erase') {
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.lineWidth = penSize * 5;
+      activeCtx.globalCompositeOperation = 'destination-out';
+      activeCtx.lineWidth = penSize * 5;
     } else {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = penColor;
-      ctx.lineWidth = penSize;
+      activeCtx.globalCompositeOperation = 'source-over';
+      activeCtx.strokeStyle = penColor;
+      activeCtx.lineWidth = penSize;
     }
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+    activeCtx.lineCap = 'round'; activeCtx.lineJoin = 'round'; activeCtx.stroke();
     lastX = p[0]; lastY = p[1];
   }
 }
 function endDraw() {
+  if (isDrawing && activePage !== undefined) saves[activePage] = activeCtx.getImageData(0,0,activeCanvas.width,activeCanvas.height);
   isDrawing = false; panSX = 0;
-  if (tool === 'pan') canvas.style.cursor = 'grab';
+  if (tool === 'pan') { canvas.style.cursor = 'grab'; canvasL.style.cursor = 'grab'; canvasR.style.cursor = 'grab'; }
 }
 
 // ── Text boxes ──
 var dragRect = document.getElementById('dragRect');
 var dragStart = null;
+var activeTextLayer = textLayer, activeTextPage = 0, activePageWrapEl = pageWrap;
 
-function pageLocalPos(clientX, clientY) {
-  var r = pageWrap.getBoundingClientRect();
+function pageLocalPos(clientX, clientY, wrapEl) {
+  var r = (wrapEl || activePageWrapEl).getBoundingClientRect();
   return { x: (clientX - r.left) / scale, y: (clientY - r.top) / scale };
 }
 
 function saveTextBoxes() {
-  var arr = [];
-  textLayer.querySelectorAll('.tbox').forEach(function(b) {
-    arr.push({ x: b.style.left, y: b.style.top, w: b.style.width, h: b.style.height,
-               text: b.value, color: b.style.color, size: b.style.fontSize });
-  });
-  textSaves[cur] = arr;
+  // 1페이지 모드
+  if (!spreadMode) {
+    var arr = [];
+    textLayer.querySelectorAll('.tbox').forEach(function(b) {
+      arr.push({ x: b.style.left, y: b.style.top, w: b.style.width, h: b.style.height,
+                 text: b.value, color: b.style.color, size: b.style.fontSize });
+    });
+    textSaves[cur] = arr;
+  } else {
+    // 2페이지 모드: 좌우 각각 저장
+    var left = cur, right = cur + 1;
+    var arrL = [];
+    textLayerL.querySelectorAll('.tbox').forEach(function(b) {
+      arrL.push({ x: b.style.left, y: b.style.top, w: b.style.width, h: b.style.height,
+                  text: b.value, color: b.style.color, size: b.style.fontSize });
+    });
+    textSaves[left] = arrL;
+    if (right < TOTAL) {
+      var arrR = [];
+      textLayerR.querySelectorAll('.tbox').forEach(function(b) {
+        arrR.push({ x: b.style.left, y: b.style.top, w: b.style.width, h: b.style.height,
+                    text: b.value, color: b.style.color, size: b.style.fontSize });
+      });
+      textSaves[right] = arrR;
+    }
+  }
 }
 
 function renderTextBoxes() {
   textLayer.innerHTML = '';
-  (textSaves[cur] || []).forEach(makeTextBox);
+  (textSaves[cur] || []).forEach(function(d) { makeTextBoxIn(d, textLayer); });
 }
 
-function makeTextBox(d) {
+function renderSpreadTextBoxes(left, right) {
+  textLayerL.innerHTML = '';
+  (textSaves[left] || []).forEach(function(d) { makeTextBoxIn(d, textLayerL); });
+  textLayerR.innerHTML = '';
+  (textSaves[right] || []).forEach(function(d) { makeTextBoxIn(d, textLayerR); });
+}
+
+function makeTextBox(d) { return makeTextBoxIn(d, activeTextLayer); }
+function makeTextBoxIn(d, layer) {
   var box = document.createElement('textarea');
   box.className = 'tbox';
   box.style.left = d.x; box.style.top = d.y;
@@ -521,21 +581,28 @@ function makeTextBox(d) {
     if (e.key === 'Escape') { box.blur(); box.remove(); }
     e.stopPropagation();
   });
-  textLayer.appendChild(box);
+  layer.appendChild(box);
   return box;
 }
 
-// Drag on textLayer to draw a box
-textLayer.addEventListener('mousedown', function(e) {
-  if (tool !== 'text') return;
-  if (e.target !== textLayer) return; // let existing boxes handle own clicks
-  var p = pageLocalPos(e.clientX, e.clientY);
-  dragStart = p;
-  dragRect.style.left = p.x+'px'; dragRect.style.top = p.y+'px';
-  dragRect.style.width = '0'; dragRect.style.height = '0';
-  dragRect.style.display = 'block';
-  e.preventDefault();
-});
+function attachTextLayer(tl, wrapEl, pageOffset) {
+  tl.addEventListener('mousedown', function(e) {
+    if (tool !== 'text') return;
+    if (e.target !== tl) return;
+    activeTextLayer = tl;
+    activePageWrapEl = wrapEl;
+    activeTextPage = spreadMode ? cur + pageOffset : cur;
+    var p = pageLocalPos(e.clientX, e.clientY, wrapEl);
+    dragStart = p;
+    dragRect.style.left = p.x+'px'; dragRect.style.top = p.y+'px';
+    dragRect.style.width = '0'; dragRect.style.height = '0';
+    dragRect.style.display = 'block';
+    e.preventDefault();
+  });
+}
+attachTextLayer(textLayer, pageWrap, 0);
+attachTextLayer(textLayerL, document.getElementById('pageWrapL'), 0);
+attachTextLayer(textLayerR, document.getElementById('pageWrapR'), 1);
 window.addEventListener('mousemove', function(e) {
   if (!dragStart) return;
   var p = pageLocalPos(e.clientX, e.clientY);
