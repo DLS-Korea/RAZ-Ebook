@@ -433,6 +433,8 @@ function switchQrTab(tab) {
   document.getElementById('tabPage').style.display = tab === 'page' ? 'block' : 'none';
   document.getElementById('tabVideo').style.display = tab === 'video' ? 'block' : 'none';
 }
+var PAGE_VIDEOS = {0:"https://www.youtube.com/watch?v=gzSrWYKFnyo",2:"https://www.youtube.com/watch?v=GCEXovexXR4",6:"https://www.youtube.com/watch?v=9nz1dbgkwDQ",8:"https://www.youtube.com/watch?v=m2qjSuJxZwo",10:"https://www.youtube.com/watch?v=wQjY71_YwD0",12:"https://www.youtube.com/watch?v=dLkJ4OPZfbg",16:"https://www.youtube.com/watch?v=rpMpG0U8-qg",18:"https://www.youtube.com/watch?v=um94dKIBOhE",20:"https://www.youtube.com/watch?v=3NvJgqS_PSo",22:"https://www.youtube.com/watch?v=4Mgvi2YkKXo",24:"https://www.youtube.com/watch?v=AoLWy3nUxyk",26:"https://www.youtube.com/watch?v=ovlqExVh5us",28:"https://www.youtube.com/watch?v=RS2BPiNKhsA",30:"https://www.youtube.com/watch?v=8qskXR4F0TI",32:"https://www.youtube.com/watch?v=4gLhmNMbPY0",34:"https://www.youtube.com/watch?v=DbJqy_P6vP0",36:"https://www.youtube.com/watch?v=1578HzHxIjI",38:"https://www.youtube.com/watch?v=SxG-BM5_F24",40:"https://www.youtube.com/watch?v=VLYguVD89Eg",42:"https://www.youtube.com/watch?v=1ibq0KIosAA",44:"https://www.youtube.com/watch?v=FS9vQzGH12c",46:"https://www.youtube.com/watch?v=fA1gQ9S16W0",48:"https://www.youtube.com/watch?v=siqa7GQvHws",50:"https://www.youtube.com/watch?v=RKTnfPWp-UI",52:"https://www.youtube.com/watch?v=VXo3Ayq5vBM",54:"https://www.youtube.com/watch?v=zdtofa441S0",56:"https://www.youtube.com/watch?v=Xah6eXnsSMI",58:"https://www.youtube.com/watch?v=OlJ5l-k6Ivw",60:"https://www.youtube.com/watch?v=_Y36CW198zE",62:"https://www.youtube.com/watch?v=qd0g7kBLjfU",64:"https://www.youtube.com/watch?v=A0jydJjac5M",66:"https://www.youtube.com/watch?v=VSSx5rgcdWQ",68:"https://www.youtube.com/watch?v=fFMx2do6IJw",70:"https://www.youtube.com/watch?v=iYgSTMu1X1c",72:"https://www.youtube.com/watch?v=Ek2_M62NWCw",74:"https://www.youtube.com/watch?v=PVo_ENM768I",76:"https://www.youtube.com/watch?v=hFUp3LEOdLY",78:"https://www.youtube.com/watch?v=cIz0fSodhqk",80:"https://www.youtube.com/watch?v=L-QxbOmqmTM",82:"https://www.youtube.com/watch?v=kyur2F4cnF4",84:"https://www.youtube.com/watch?v=gWcHsCz3I2o",86:"https://www.youtube.com/watch?v=kvoXf5cQrts",88:"https://www.youtube.com/watch?v=FHXq2Dxdv0g",90:"https://www.youtube.com/watch?v=6Tnwwon9YLg",92:"https://www.youtube.com/watch?v=I74Ckf4kAhk",94:"https://www.youtube.com/watch?v=PLRVyRnCOMk",96:"https://www.youtube.com/watch?v=0GlC0TyLh2E",98:"https://www.youtube.com/watch?v=X4BtinGsY84",100:"https://www.youtube.com/watch?v=H7XJUGYEp2o",102:"https://www.youtube.com/watch?v=PXi1FiFmF0A",104:"https://www.youtube.com/watch?v=kZdjiPl93LY",106:"https://www.youtube.com/watch?v=k4XDs1jkTbE",108:"https://www.youtube.com/watch?v=VffnfzFoLzg",110:"https://www.youtube.com/watch?v=i4rJ14xZCCU",112:"https://www.youtube.com/watch?v=fi_rrfbaC1g",114:"https://www.youtube.com/watch?v=jUfCxHlzHUk",116:"https://www.youtube.com/watch?v=9utbY0YBwSY",118:"https://www.youtube.com/watch?v=zENjm4g18BM",120:"https://www.youtube.com/watch?v=72-IGOmrMgo",122:"https://www.youtube.com/watch?v=EKAuWmUQrgk",124:"https://www.youtube.com/watch?v=IUlYz0hRtJU",126:"https://www.youtube.com/watch?v=cUjLthxVzas",128:"https://www.youtube.com/watch?v=1S8ZpQxmCiI",130:"https://www.youtube.com/watch?v=Z3v7x_AR0tY",132:"https://www.youtube.com/watch?v=8Gpi-6vDbbg",134:"https://www.youtube.com/watch?v=n9TXaVLTuEE",136:"https://www.youtube.com/watch?v=NZPTJPzAOIc",138:"https://www.youtube.com/watch?v=7ptA06vmD-w"};
+
 function showQR() {
   var url = location.href;
   var encoded = encodeURIComponent(url);
@@ -440,9 +442,9 @@ function showQR() {
   document.getElementById('qrImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encoded;
   document.getElementById('qrLink').href = url;
 
-  var saved = localStorage.getItem('videoUrl');
-  if (saved) {
-    document.getElementById('qrVideoUrl').value = saved;
+  var pageVideo = PAGE_VIDEOS[cur];
+  if (pageVideo) {
+    document.getElementById('qrVideoUrl').value = pageVideo;
     switchQrTab('video');
     playVideo();
   } else {
@@ -454,7 +456,7 @@ function clearVideo() {
   localStorage.removeItem('videoUrl');
   document.getElementById('qrVideoUrl').value = '';
   var vc = document.getElementById('videoContainer');
-  vc.innerHTML = '<span style="color:#666;font-size:0.85rem;">URL을 입력하고 재생을 누르세요</span>';
+  vc.innerHTML = '<span style="color:#666;font-size:0.85rem;">영상이 없는 페이지입니다</span>';
 }
 function closeQrModal() {
   // 영상 정지
