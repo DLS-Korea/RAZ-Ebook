@@ -58,11 +58,10 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 /* QR modal */
 .qr-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 500; align-items: center; justify-content: center; }
 .qr-modal.show { display: flex; }
-.qr-box { background: #fff; border-radius: 16px; padding: 24px; text-align: center; max-width: 280px; width: 90%; }
-.qr-box h3 { color: #111; font-size: 1rem; margin-bottom: 4px; }
-.qr-box p { color: #666; font-size: 0.75rem; margin-bottom: 16px; word-break: break-all; }
+.qr-box { background: #1a1a1a; border-radius: 12px; padding: 16px; text-align: center; width: 94vw; max-width: 1200px; max-height: 94vh; display: flex; flex-direction: column; overflow: hidden; }
+.qr-box h3 { color: #fff; font-size: 1rem; margin-bottom: 4px; }
+.qr-box p { color: #aaa; font-size: 0.75rem; margin-bottom: 16px; word-break: break-all; }
 .qr-box img { width: 200px; height: 200px; }
-.qr-box { max-width: 340px; }
 .qr-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
 .qr-tab { flex: 1; background: #eee; border: none; border-radius: 6px; padding: 6px; cursor: pointer; font-size: 0.8rem; color: #555; }
 .qr-tab.active { background: #0078d4; color: #fff; }
@@ -119,13 +118,13 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
     </div>
 
     <!-- 영상 탭 -->
-    <div id="tabVideo" style="display:none;">
+    <div id="tabVideo" style="display:none;flex:1;min-height:0;display:flex;flex-direction:column;">
       <div style="display:flex;gap:6px;margin-bottom:10px;">
         <input id="qrVideoUrl" type="url" placeholder="YouTube 또는 영상 URL" style="flex:1;padding:6px 8px;border-radius:6px;border:1px solid #ccc;font-size:0.82rem;box-sizing:border-box;">
         <button onclick="playVideo()" style="background:#0078d4;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.85rem;white-space:nowrap;">▶ 재생</button>
         <button onclick="clearVideo()" style="background:#555;color:#fff;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:0.85rem;" title="저장된 영상 삭제">✕</button>
       </div>
-      <div id="videoContainer" style="width:100%;background:#000;border-radius:8px;overflow:hidden;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;">
+      <div id="videoContainer" style="width:100%;background:#000;border-radius:8px;overflow:hidden;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;flex:1;min-height:0;">
         <span style="color:#666;font-size:0.85rem;">URL을 입력하고 재생을 누르세요</span>
       </div>
     </div>
