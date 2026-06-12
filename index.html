@@ -79,13 +79,17 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 
 <div class="header">
   <span class="title">📚 RAZ Report 2-3</span>
-  <button class="tool-btn" data-tool="draw" onclick="setTool('draw')">🖊️ 펜</button>
+  <button class="tool-btn" data-tool="draw" data-pentype="pen" onclick="setTool('draw');setPenType('pen')">🖊️ 펜</button>
+  <button class="tool-btn" data-tool="draw" data-pentype="highlight" onclick="setTool('draw');setPenType('highlight')">🖍️ 형광</button>
+  <button class="tool-btn" data-tool="draw" data-pentype="marker" onclick="setTool('draw');setPenType('marker')">✏️ 마커</button>
   <button class="tool-btn" data-tool="text" onclick="setTool('text')">🔤 텍스트</button>
   <button class="tool-btn" data-tool="erase" onclick="setTool('erase')">📝 지우개</button>
   <button class="tool-btn" data-tool="pan" onclick="setTool('pan')">🤚 이동</button>
   <div class="sep"></div>
   <input type="color" id="colorPick" class="color-pick" value="#ff0000">
-  <input type="range" id="sizePick" min="2" max="24" value="5">
+  <button class="tool-btn" onclick="changeSize(-1)" style="padding:5px 8px;font-size:1rem;line-height:1;">−</button>
+  <span id="sizeLabel" style="color:#aaa;font-size:0.8rem;min-width:24px;text-align:center;">5</span>
+  <button class="tool-btn" onclick="changeSize(1)" style="padding:5px 8px;font-size:1rem;line-height:1;">＋</button>
   <div class="sep"></div>
   <button class="tool-btn" onclick="zoom(0.25)">🔍+</button>
   <span class="zoom-ind" id="zoomLabel">100%</span>
@@ -179,6 +183,7 @@ input[type=range] { width: 60px; accent-color: #0078d4; cursor: pointer; }
 var TOTAL = 140; // pages 001.jpg ~ 140.jpg (skip 000, 141)
 var cur = 0;
 var tool = 'none';
+var penType = 'pen'; // pen | highlight | marker
 var spreadMode = false;
 var penColor = '#ff0000';
 var penSize = 5;
@@ -352,21 +357,34 @@ function toggleSpread() {
 }
 
 // ── Tool ──
-function setTool(t) {
-  // 같은 도구 다시 클릭하면 해제
-  if (t === tool) t = 'none';
-  tool = t;
+function updateToolActive() {
   document.querySelectorAll('.tool-btn[data-tool]').forEach(function(b) {
-    b.classList.toggle('active', b.dataset.tool === t);
+    var match = b.dataset.tool === tool;
+    if (b.dataset.pentype) match = match && b.dataset.pentype === penType;
+    b.classList.toggle('active', match);
   });
+}
+function setTool(t) {
+  if (t === tool && (t !== 'draw')) t = 'none';
+  tool = t;
+  updateToolActive();
   var cur_cursor = t === 'pan' ? 'grab' : t === 'erase' ? 'cell' : t === 'draw' ? 'crosshair' : 'default';
   [canvas, canvasL, canvasR].forEach(function(c) { c.style.cursor = cur_cursor; });
   textLayer.style.pointerEvents = t === 'text' ? 'all' : 'none';
   textLayerL.style.pointerEvents = t === 'text' ? 'all' : 'none';
   textLayerR.style.pointerEvents = t === 'text' ? 'all' : 'none';
 }
+function setPenType(pt) {
+  penType = pt;
+  tool = 'draw';
+  updateToolActive();
+  [canvas, canvasL, canvasR].forEach(function(c) { c.style.cursor = 'crosshair'; });
+}
 document.getElementById('colorPick').oninput = function(e) { penColor = e.target.value; };
-document.getElementById('sizePick').oninput = function(e) { penSize = +e.target.value; };
+function changeSize(delta) {
+  penSize = Math.min(40, Math.max(1, penSize + delta));
+  document.getElementById('sizeLabel').textContent = penSize;
+}
 
 function clearCanvas() {
   if (spreadMode) {
@@ -505,20 +523,36 @@ function doDraw(e) {
     if (e.cancelable) e.preventDefault();
     var p = getPos(e);
     if (tool === 'erase') {
-      // 지우개: 빠른 직선
       activeCtx.beginPath(); activeCtx.moveTo(lastX, lastY); activeCtx.lineTo(p[0], p[1]);
       activeCtx.globalCompositeOperation = 'destination-out';
-      activeCtx.lineWidth = penSize * 5;
+      activeCtx.lineWidth = penSize * 6;
+      activeCtx.lineCap = 'round'; activeCtx.lineJoin = 'round'; activeCtx.stroke();
+      lastX = p[0]; lastY = p[1];
+    } else if (penType === 'highlight') {
+      // 형광펜: 반투명, 납작한 사각형 끝
+      activeCtx.beginPath(); activeCtx.moveTo(lastX, lastY); activeCtx.lineTo(p[0], p[1]);
+      activeCtx.globalCompositeOperation = 'source-over';
+      activeCtx.globalAlpha = 0.35;
+      activeCtx.strokeStyle = penColor;
+      activeCtx.lineWidth = penSize * 4;
+      activeCtx.lineCap = 'square'; activeCtx.lineJoin = 'bevel'; activeCtx.stroke();
+      activeCtx.globalAlpha = 1.0;
+      lastX = p[0]; lastY = p[1];
+    } else if (penType === 'marker') {
+      // 마커: 불투명, 두껍고 납작
+      activeCtx.beginPath(); activeCtx.moveTo(lastX, lastY); activeCtx.lineTo(p[0], p[1]);
+      activeCtx.globalCompositeOperation = 'source-over';
+      activeCtx.strokeStyle = penColor;
+      activeCtx.lineWidth = penSize * 3;
       activeCtx.lineCap = 'round'; activeCtx.lineJoin = 'round'; activeCtx.stroke();
       lastX = p[0]; lastY = p[1];
     } else {
-      // 펜: 베지어 곡선으로 부드럽게
+      // 일반 펜: 베지어 곡선 스무딩
       drawPoints.push(p);
       if (drawPoints.length < 3) { lastX = p[0]; lastY = p[1]; return; }
       var p0 = drawPoints[drawPoints.length - 3];
       var p1 = drawPoints[drawPoints.length - 2];
       var p2 = drawPoints[drawPoints.length - 1];
-      // 중간점 평균으로 제어점 계산
       var mx1 = (p0[0] + p1[0]) / 2, my1 = (p0[1] + p1[1]) / 2;
       var mx2 = (p1[0] + p2[0]) / 2, my2 = (p1[1] + p2[1]) / 2;
       activeCtx.beginPath();
