@@ -489,6 +489,10 @@ function startDrawOn(e, cvs, cvsCtx, pageOffset) {
   }
 }
 function startDraw(e) { startDrawOn(e, canvas, ctx, 0); }
+
+// 베지어 곡선 스무딩용 포인트 버퍼
+var drawPoints = [];
+
 function doDraw(e) {
   if (e.touches && e.touches.length > 1) return;
   var cx = e.touches ? e.touches[0].clientX : e.clientX;
@@ -500,21 +504,47 @@ function doDraw(e) {
   } else if (isDrawing) {
     if (e.cancelable) e.preventDefault();
     var p = getPos(e);
-    activeCtx.beginPath(); activeCtx.moveTo(lastX, lastY); activeCtx.lineTo(p[0], p[1]);
     if (tool === 'erase') {
+      // 지우개: 빠른 직선
+      activeCtx.beginPath(); activeCtx.moveTo(lastX, lastY); activeCtx.lineTo(p[0], p[1]);
       activeCtx.globalCompositeOperation = 'destination-out';
       activeCtx.lineWidth = penSize * 5;
+      activeCtx.lineCap = 'round'; activeCtx.lineJoin = 'round'; activeCtx.stroke();
+      lastX = p[0]; lastY = p[1];
     } else {
+      // 펜: 베지어 곡선으로 부드럽게
+      drawPoints.push(p);
+      if (drawPoints.length < 3) { lastX = p[0]; lastY = p[1]; return; }
+      var p0 = drawPoints[drawPoints.length - 3];
+      var p1 = drawPoints[drawPoints.length - 2];
+      var p2 = drawPoints[drawPoints.length - 1];
+      // 중간점 평균으로 제어점 계산
+      var mx1 = (p0[0] + p1[0]) / 2, my1 = (p0[1] + p1[1]) / 2;
+      var mx2 = (p1[0] + p2[0]) / 2, my2 = (p1[1] + p2[1]) / 2;
+      activeCtx.beginPath();
+      activeCtx.moveTo(mx1, my1);
+      activeCtx.quadraticCurveTo(p1[0], p1[1], mx2, my2);
       activeCtx.globalCompositeOperation = 'source-over';
       activeCtx.strokeStyle = penColor;
       activeCtx.lineWidth = penSize;
+      activeCtx.lineCap = 'round'; activeCtx.lineJoin = 'round'; activeCtx.stroke();
+      lastX = mx2; lastY = my2;
     }
-    activeCtx.lineCap = 'round'; activeCtx.lineJoin = 'round'; activeCtx.stroke();
-    lastX = p[0]; lastY = p[1];
   }
 }
 function endDraw() {
-  if (isDrawing && activePage !== undefined) saves[activePage] = activeCtx.getImageData(0,0,activeCanvas.width,activeCanvas.height);
+  if (isDrawing) {
+    // 마지막 점까지 연결
+    if (tool !== 'erase' && drawPoints.length >= 2) {
+      var last = drawPoints[drawPoints.length - 1];
+      activeCtx.beginPath(); activeCtx.moveTo(lastX, lastY); activeCtx.lineTo(last[0], last[1]);
+      activeCtx.globalCompositeOperation = 'source-over';
+      activeCtx.strokeStyle = penColor; activeCtx.lineWidth = penSize;
+      activeCtx.lineCap = 'round'; activeCtx.stroke();
+    }
+    drawPoints = [];
+    if (activePage !== undefined) saves[activePage] = activeCtx.getImageData(0,0,activeCanvas.width,activeCanvas.height);
+  }
   isDrawing = false; panSX = 0;
   if (tool === 'pan') { [canvas, canvasL, canvasR].forEach(function(c){c.style.cursor='grab';}); }
 }
